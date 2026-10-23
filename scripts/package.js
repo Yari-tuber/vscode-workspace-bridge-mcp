@@ -1,0 +1,10 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { version } = require('../package.json');
+if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Invalid release version.');
+fs.mkdirSync('artifacts', { recursive: true });
+const result = spawnSync(process.execPath, [require.resolve('@vscode/vsce/vsce'), 'package', '--no-dependencies', '--out', path.join('artifacts', `workspace-bridge-mcp-${version}.vsix`)], { stdio: 'inherit', windowsHide: true });
+if (result.error) throw result.error;
+process.exitCode = result.status ?? 1;

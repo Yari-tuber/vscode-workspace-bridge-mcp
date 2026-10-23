@@ -1,0 +1,19 @@
+{
+  "extension.displayName": "工作区桥接 MCP",
+  "extension.description": "通过本地身份认证和会话权限控制，将可信的 MCP 客户端连接到当前 VS Code 工作区。",
+  "command.category": "工作区桥接",
+  "command.start": "启动桥接",
+  "command.stop": "停止桥接",
+  "command.status": "查看状态",
+  "command.copyConnection": "复制客户端配置",
+  "command.copyToken": "复制密钥",
+  "command.rotateToken": "更换密钥",
+  "command.setAccess": "管理会话权限",
+  "command.exportDiagnostics": "导出诊断",
+  "view.title": "工作区桥接",
+  "view.control": "连接与权限",
+  "configuration.title": "工作区桥接 MCP",
+  "configuration.autoStart": "打开此可信工作区时，自动启动本地只读桥接。修改和终端权限每次会话都必须在本机单独开启。",
+  "configuration.port": "首选本地端口。被占用时依次尝试后续 9 个端口，并显示实际连接地址。设为 0 时自动分配端口。",
+  "configuration.allowedHosts": "本地服务额外允许的精确 HTTP Host 名称，默认为空。此设置不会创建隧道或开放公网监听。仅填写你控制的名称。"
+}

@@ -1,0 +1,19 @@
+{
+  "extension.displayName": "Workspace Bridge MCP",
+  "extension.description": "Connect a trusted MCP client to this VS Code workspace with local authentication and session access controls.",
+  "command.category": "Workspace Bridge",
+  "command.start": "Start Bridge",
+  "command.stop": "Stop Bridge",
+  "command.status": "Show Status",
+  "command.copyConnection": "Copy Client Configuration",
+  "command.copyToken": "Copy Secret Token",
+  "command.rotateToken": "Rotate Secret Token",
+  "command.setAccess": "Manage Session Access",
+  "command.exportDiagnostics": "Export Diagnostics",
+  "view.title": "Workspace Bridge",
+  "view.control": "Connection & Access",
+  "configuration.title": "Workspace Bridge MCP",
+  "configuration.autoStart": "Start a local read-only bridge when this trusted workspace opens. Edit and terminal permissions always require approval for each session.",
+  "configuration.port": "Preferred local port. If occupied, the bridge tries the next 9 ports and displays the actual endpoint. Use 0 for an automatically assigned port.",
+  "configuration.allowedHosts": "Additional exact HTTP Host names accepted by the local server. Empty by default. This does not create a tunnel or enable a public listener. Only configure names you control."
+}

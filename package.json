@@ -1,0 +1,173 @@
+{
+  "name": "vscode-workspace-bridge-mcp",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "publisher": "workspace-bridge",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "workspace",
+    "ai",
+    "bridge",
+    "privacy"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "workspaceBridge",
+          "title": "%view.title%",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "workspaceBridge": [
+        {
+          "id": "workspaceBridge.control",
+          "name": "%view.control%"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "workspaceBridge.start",
+        "title": "%command.start%",
+        "icon": "$(play)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.stop",
+        "title": "%command.stop%",
+        "icon": "$(debug-stop)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.status",
+        "title": "%command.status%",
+        "icon": "$(pulse)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.copyConnection",
+        "title": "%command.copyConnection%",
+        "icon": "$(copy)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.copyToken",
+        "title": "%command.copyToken%",
+        "icon": "$(key)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.rotateToken",
+        "title": "%command.rotateToken%",
+        "icon": "$(refresh)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.setAccess",
+        "title": "%command.setAccess%",
+        "icon": "$(shield)",
+        "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.exportDiagnostics",
+        "title": "%command.exportDiagnostics%",
+        "icon": "$(output)",
+        "category": "%command.category%"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "workspaceBridge.status",
+          "when": "view == workspaceBridge.control",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "workspaceBridge.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "%configuration.autoStart%"
+        },
+        "workspaceBridge.port": {
+          "type": "integer",
+          "default": 3338,
+          "minimum": 0,
+          "maximum": 65525,
+          "scope": "machine",
+          "description": "%configuration.port%"
+        },
+        "workspaceBridge.allowedHosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "%configuration.allowedHosts%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "test:integration": "node scripts/integration.js",
+    "privacy": "node scripts/privacy-scan.js",
+    "vscode:prepublish": "npm run build",
+    "package": "node scripts/package.js",
+    "verify:package": "node scripts/verify-package.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ignore": "^7.0.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "4.0.0",
+    "@vscode/test-electron": "3.1.0",
+    "esbuild": "0.28.2",
+    "pngjs": "^7.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yari-tuber/vscode-workspace-bridge-mcp.git"
+  },
+  "homepage": "https://github.com/Yari-tuber/vscode-workspace-bridge-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/issues"
+  }
+}

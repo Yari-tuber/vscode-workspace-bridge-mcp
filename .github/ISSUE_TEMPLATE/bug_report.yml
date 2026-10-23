@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible problem using dummy workspace data.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For vulnerabilities, use SECURITY.md and private vulnerability reporting.
+        Never attach bearer tokens, copied connection configurations, personal paths, source contents, or terminal transcripts from a real workspace.
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, VS Code version, and whether the extension host is desktop, WSL, SSH, or a container.
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+      description: Leave empty if the issue is entirely in the local control panel.
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use a disposable workspace with dummy file names and content.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Review all pasted text and screenshots. Do not include secrets or private workspace data.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, copied connection configuration, personal paths, and real workspace content.
+          required: true

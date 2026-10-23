@@ -1,0 +1,70 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+      - run: npm run privacy
+      - run: npm audit --audit-level=high
+      - run: npm run package
+      - run: npm run verify:package
+  editor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: xvfb-run -a npm run test:integration
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, editor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run package
+      - run: npm run verify:package
+      - name: Publish the verified version once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "This version already has a release. Bump package.json for another release."
+            exit 0
+          fi
+          cd artifacts
+          sha256sum "workspace-bridge-mcp-${version}.vsix" > SHA256SUMS.txt
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Workspace Bridge MCP ${version}" --notes-file ../docs/RELEASE-NOTES.md "workspace-bridge-mcp-${version}.vsix" SHA256SUMS.txt

@@ -1,0 +1,27 @@
+name: Feature request
+description: Describe the task you want to complete and the permission it needs.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What task is difficult today?
+      description: Describe the user outcome and a concrete example using dummy data.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include the client or platform involved, if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Permissions and alternatives
+      description: Does the feature read files, change files, execute commands, or expose a remote endpoint? Describe the local control you expect.
+  - type: markdown
+    attributes:
+      value: Do not include bearer tokens, private paths, source contents, or real connection configurations.

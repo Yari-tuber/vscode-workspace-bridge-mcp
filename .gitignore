@@ -1,0 +1,14 @@
+node_modules/
+dist/
+artifacts/
+.vscode-test/
+.test-runtime/
+coverage/
+*.vsix
+*.log
+.env*
+*.pem
+*.key
+credentials*
+.DS_Store
+Thumbs.db
