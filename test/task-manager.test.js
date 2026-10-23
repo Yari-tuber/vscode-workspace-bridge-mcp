@@ -29,7 +29,7 @@ async function until(check, message = 'Condition was not reached', timeout = 8_0
 }
 
 async function fixture(t, overrides = {}) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-bridge-tasks-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-bridge-tasks-')));
   const context = {
     workspace: { id: 'task-test-session', trusted: true, roots: [{ path: root }] },
     access: { read: true, edit: false, terminal: true }, approvals: [], events: [], audits: [], children: [],
