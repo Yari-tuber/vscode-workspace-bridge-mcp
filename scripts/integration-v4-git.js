@@ -32,7 +32,12 @@ async function run({ vscode, root, check }) {
   const support = await fs.mkdtemp(path.join(tempRoot, 'workspace-bridge-git-runtime-'));
   let server, client;
   try {
-    const executable = await host.getGitExecutable(); assert.ok(executable && path.isAbsolute(executable));
+    // Some editor distributions do not expose an absolute Git API path until
+    // repository discovery. Use the same standard installation fallback as
+    // the production adapter, never a workspace command or PATH lookup.
+    const executable = await host.getGitExecutable() || (process.platform === 'win32'
+      ? path.join(process.env.ProgramFiles, 'Git', 'cmd', 'git.exe') : '/usr/bin/git');
+    assert.ok(path.isAbsolute(executable)); await fs.access(executable);
     const config = path.join(support, 'empty-config'); const template = path.join(support, 'empty-template');
     await fs.writeFile(config, ''); await fs.mkdir(template);
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)));
