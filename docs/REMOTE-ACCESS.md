@@ -6,7 +6,7 @@ The default endpoint is local to the machine running the extension host. The ext
 
 A local client needs MCP Streamable HTTP support and the ability to send an `Authorization: Bearer …` header. A remote client also needs access to a user-managed HTTPS endpoint. Client configuration formats vary; use the configuration copied by the extension as the source of the current URL and token.
 
-Version 0.1.0 does not implement an OAuth authorization server. A hosted connector that requires OAuth or cannot send custom bearer headers may be incompatible. Do not treat a successful browser request as proof that a particular AI product supports this server.
+This release does not implement an OAuth authorization server. A hosted connector that requires OAuth or cannot send custom bearer headers may be incompatible. Do not treat a successful browser request as proof that a particular AI product supports this server.
 
 ## Required forwarding boundaries
 

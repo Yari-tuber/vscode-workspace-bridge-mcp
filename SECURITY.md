@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are developed for the latest released version. Version 0.1.0 is an early release; do not assume an independent security certification or a guarantee that every vulnerability has been found.
+Security fixes are developed for the latest released version. Version 0.2.0 is an early release; do not assume an independent security certification or a guarantee that every vulnerability has been found.
 
 ## Report a vulnerability privately
 

@@ -1,43 +1,73 @@
 # Workspace Bridge MCP
 
-<img src="media/icon.png" width="88" height="88" alt="Workspace Bridge MCP: connected code brackets" />
+<p align="center">
+  <img src="media/readme-hero.png" alt="Workspace Bridge MCP — Your workspace. Your controls." width="1280" />
+</p>
 
-[![Verify](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml) · [MIT license](LICENSE) · [Validation evidence](docs/VALIDATION.md)
+<p align="center">
+  <a href="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml"><img src="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases"><img src="https://img.shields.io/github/v/release/Yari-tuber/vscode-workspace-bridge-mcp?color=55cdb0&amp;label=release" alt="Latest release" /></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/VS_Code-1.96%2B-007ACC" alt="VS Code 1.96 or newer" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-94a3b8" alt="MIT license" /></a>
+</p>
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [Security](SECURITY.md)
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a><br />
+  <a href="#start-in-three-steps">Get started</a> · <a href="docs/TOOLS.md">Tool reference</a> · <a href="docs/GETTING-STARTED.md">Setup guide</a> · <a href="SECURITY.md">Security</a>
+</p>
 
-Let an MCP client work with the folder open in VS Code. Read project files, inspect diagnostics, and make deliberate edits from your AI tool, while keeping permission controls in the editor.
+**Give your AI client the context already available in VS Code.** Read live files, follow symbols, inspect diagnostics, and prepare precise edits—with access controlled in the editor.
 
-The bridge starts with read access. Editing and terminal execution require local session controls; each terminal command also needs local approval. The server listens on loopback, requires a bearer token, and does not automatically publish a tunnel or collect telemetry.
+Workspace Bridge is an **MCP server inside VS Code**. External MCP clients connect to it. VS Code's built-in MCP support goes in the other direction: it makes VS Code a client of other servers. You do not need to add this extension as a server inside VS Code to expose the workspace.
 
-The icon joins code brackets with a bridge stroke: the editor and your AI client are connected through one controlled workspace boundary.
+> **Connection requirement:** Streamable HTTP with a custom `Authorization: Bearer …` header. Bearer authentication is not OAuth; hosted connectors that require OAuth may be incompatible. The bridge does not create a public tunnel.
 
-Version **0.1.0** is an early release. Windows is the current validation platform. macOS and Linux are intended targets; their acceptance checks remain unverified. See the [release checklist](docs/RELEASE-CHECKLIST.md) for the scope of release evidence.
+![Workspace Bridge running in VS Code with its connection panel and a sample file](media/screenshots/control-panel.jpg)
 
-## What you can do
+*Real screenshot of v0.2.0 in an isolated VS Code development profile. The sample project is synthetic; no token or personal project is shown. The banner and workflow below are original illustrations.*
 
-| Task | How access is controlled |
+## Start in three steps
+
+1. **Install.** Download the `.vsix` from [Releases](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases/latest), verify its checksum, then choose **Extensions → … → Install from VSIX…** in VS Code.
+2. **Start.** Open a trusted folder, open **Workspace Bridge** in the Activity Bar, and select **Start bridge**. Confirm the workspace shown in the panel.
+3. **Connect.** Select **Copy client configuration**, add it to a compatible MCP client, then use **Copy starter prompt** to begin with workspace discovery and reading.
+
+The bridge starts with read access; editing and terminal execution stay off until you enable them locally. Each window has its own token. Connection configuration contains that secret—keep it in protected client settings, out of repositories and chat messages.
+
+[Detailed installation, client configuration, and troubleshooting →](docs/GETTING-STARTED.md)
+
+## Work with the editor's context
+
+| Your goal | What the bridge provides |
 | --- | --- |
-| Identify the active workspace and discover its capabilities | Explicit workspace identity; stale or mismatching workspace requests fail. |
-| List, search, and read project files | Workspace Trust, workspace-root containment, sensitive-name filtering, and size limits. |
-| Read VS Code diagnostics | Returns the editor's existing diagnostics; it does not install or run a language server. |
-| Create or update a project file | Enable editing locally for this session; updates require a matching SHA-256 digest. |
-| Run a terminal command | Enable terminal access for this session, then approve that specific command in VS Code. |
-| Manage the connection | Local control panel, action picker, status bar, token rotation, and connection-configuration copying. |
+| **Find your way around** | Workspace identity, safe entry-file samples, directory listing, literal text search, and live file reads—including unsaved editor changes. |
+| **Understand the code** | Existing diagnostics, document symbols, definitions, references, hover information, and active-file/selection metadata from VS Code. Language features depend on the installed language service. |
+| **Make a precise change** | Local diff previews, hash-checked whole-file writes, range edits, and unique literal replacements. Range edits and replacements **preview by default**. |
+| **Run a relevant check** | Bounded terminal execution after you enable access and approve the individual command in VS Code. |
+| **Manage the connection** | Local control panel, status bar, connection copying, token rotation, starter prompt, and sanitized bridge diagnostics. |
 
-Use [the tool reference](docs/TOOLS.md) for tool names, parameters, and the recommended read–edit sequence.
+The server exposes **15 tools** and the `review_workspace` prompt. The [tool reference](docs/TOOLS.md) documents arguments, result limits, and the read–preview–edit sequence. Active selection text is returned only when the client explicitly requests it.
 
-## Install and connect
+<p align="center">
+  <img src="media/readme-workflow.png" alt="An MCP client connects over authenticated Streamable HTTP to Workspace Bridge in VS Code, which accesses the trusted workspace through editor APIs. Read access comes first, editing is opt-in, and each terminal command needs local approval." width="1280" />
+</p>
 
-1. Download the `.vsix` from [GitHub Releases](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases). Verify its SHA-256 against the release checksum.
-2. In VS Code, open **Extensions → … → Install from VSIX…** and select the file.
-3. Open a folder you trust. Select **Workspace Bridge** in the Activity Bar and choose **Start bridge**. You can also run **Start Bridge** (`workspaceBridge.start`) from the Command Palette.
-4. Confirm the displayed workspace and use the panel to copy the connection configuration. The actual port can change if the preferred port is occupied.
-5. Add the configuration to a trusted MCP client that supports **Streamable HTTP** and an **Authorization header**. Connect and begin with a read of a disposable file.
+## Permissions you can see
 
-Copied connection configuration contains a bearer token. Store it in the client's protected settings, keep it out of repositories and chat messages, and review clipboard-history settings. Each VS Code window has its own token, including when two windows open the same folder. Reloading or reopening the window creates a new token; copy the configuration again.
+| Capability | Initial state | Local control |
+| --- | --- | --- |
+| Read allowed files and editor context | Available when the bridge runs in a trusted workspace | Stop the bridge to end access. File tools enforce the selected workspace boundary and filtering. |
+| Preview or save edits | **Off** | Enable editing for this session. Existing-file changes need the current SHA-256; a stale snapshot is rejected. |
+| Execute a terminal command | **Off** | Enable terminal access, then approve **each command** and its working directory. |
+| Reach the bridge remotely | Loopback listener only | Configure your own HTTPS forwarding and allowed hostname. See [remote access](docs/REMOTE-ACCESS.md). |
 
-Client schemas differ. The connection values have this shape; use the panel's copied values for your running instance:
+Stopping the bridge or changing workspaces resets editing and terminal grants. Reloading a window creates a new token; rotation revokes the old one immediately. Use the configuration from the intended window and rediscover its workspace before making changes.
+
+**Approved terminal commands use your operating-system account; they are not sandboxed.** They can access files outside the workspace and use the network.
+
+## Connect a client
+
+Copy the actual configuration from the running panel. This example illustrates the connection shape; client schemas differ:
 
 ```json
 {
@@ -45,37 +75,35 @@ Client schemas differ. The connection values have this shape; use the panel's co
     "workspace-bridge": {
       "type": "http",
       "url": "http://127.0.0.1:<PORT>/mcp",
-      "headers": {
-        "Authorization": "Bearer <TOKEN>"
-      }
+      "headers": { "Authorization": "Bearer <TOKEN>" }
     }
   }
 }
 ```
 
-`<PORT>` and `<TOKEN>` are placeholders. Some clients use a different transport label or configuration structure. A stdio-only client cannot use this endpoint directly. This release does not implement OAuth, so a hosted connector requiring OAuth or lacking custom-header support may be incompatible.
+`<PORT>` and `<TOKEN>` are placeholders. A stdio-only client needs its own HTTP adapter. Remote clients need a user-managed HTTPS route; this release has no OAuth authorization server, automatic tunnel, or multi-window router.
 
-## Use editing and terminal access deliberately
+Try a first request such as:
 
-For an edit, first read the file and keep the returned SHA-256. Enable editing in the local panel, then submit the replacement with that hash. Writes to the same file are serialized within the bridge and recheck the current content before applying. If the file changed, read it again and reconcile the change. Do not blindly retry with a new hash.
+> Discover the current workspace, then read its README and current diagnostics. Summarize what you found with file references. Do not change files or run terminal commands.
 
-Terminal execution starts disabled. After you enable it, the editor shows a local approval for every command. Review the command and working directory before approving. The command uses the system shell and your operating-system account's permissions; **this is not a sandbox**. It can access files outside the workspace and use the network.
+## Privacy, with explicit limits
 
-Editing and terminal permissions reset when the server stops or the workspace changes. Stopping and restarting the bridge in the same window reuses its token; rotation revokes it immediately. Reloading the window or changing workspaces creates a new token. Normal extension shutdown deletes the current SecretStorage entry. Update saved client configurations whenever the token changes.
+- **Local by default.** Loopback binding, bearer authentication, VS Code SecretStorage, and no telemetry. Copying the configuration intentionally places a token on the clipboard and in your chosen client.
+- **Constrained file tools.** Relative paths, real-path checks, link rejection, sensitive-name/content filtering, and bounded results. Filters cannot recognize every secret or provide operating-system isolation.
+- **Minimal bridge records.** Activity logs and exported bridge diagnostics omit file contents, terminal output, tokens, and user absolute paths. Requested file, language-service, and command results still go to the client and follow its retention policies.
 
-## Privacy and security
+Read the [security policy](SECURITY.md), [threat model](docs/THREAT-MODEL.md), and [audit notes](docs/SECURITY-AUDIT.md) before exposing an endpoint or enabling terminal access. Passing tests and scans do not prove that every vulnerability is absent.
 
-- The bearer token is stored through VS Code SecretStorage. Copying it or the connection configuration intentionally exposes it to your clipboard and chosen client.
-- File tools resolve workspace-relative paths against the real filesystem and reject symbolic links, junctions, and files with multiple hard links. Paths are rechecked after asynchronous editor loading and around edits. These checks reduce risk but do not provide OS isolation from a malicious local process rapidly replacing filesystem entries. Common sensitive names and recognizable credential patterns are denied; these checks cannot detect every secret.
-- The local activity log and exported bridge diagnostics contain operational metadata, excluding file contents, terminal output, bearer tokens, and user absolute paths. Requested code diagnostics are separate tool results containing editor messages.
-- Files and command results returned to an MCP client are subject to that client's logging, model-provider, and retention policies.
-- Remote access requires your own TLS forwarding layer, allowed-host configuration, and bearer authentication. See [remote access](docs/REMOTE-ACCESS.md) before exposing an endpoint.
+## Verification and compatibility
 
-Read the [security policy](SECURITY.md), [threat model](docs/THREAT-MODEL.md), and [audit notes](docs/SECURITY-AUDIT.md). A clean scan and passing tests cannot prove that every vulnerability is absent or that an earlier installation never disclosed data.
+The release workflow checks builds, unit tests, packaging, and privacy on **Windows, macOS, and Linux**. Real editor integration has also been exercised in isolated **Windows and Linux** environments. See [validation evidence](docs/VALIDATION.md) and the [CI run](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml) for the exact release scope.
 
-## Build from source
+Requires **VS Code 1.96+**. WSL, SSH, containers, and other remote extension hosts need separate acceptance; “local” means the machine running the extension host. Client compatibility depends on transport and authentication support, not the client's brand.
 
-Use the Node.js and npm versions supported by `package.json`:
+## Build and contribute
+
+Requires **Node.js 22+**:
 
 ```sh
 git clone https://github.com/Yari-tuber/vscode-workspace-bridge-mcp.git
@@ -88,34 +116,15 @@ npm run test:integration
 npm run package
 ```
 
-Requires **VS Code 1.96 or newer**; source builds require **Node.js 22 or newer**. The integration script uses an isolated VS Code profile and temporary workspace. It downloads a VS Code test build unless `VSCODE_EXECUTABLE` points to an existing executable. The packaged extension is written to `artifacts/workspace-bridge-mcp-0.1.0.vsix`. Use a disposable workspace containing dummy data for development and acceptance.
+Integration tests use a separate VS Code profile and temporary workspace. They download a test runtime unless `VSCODE_EXECUTABLE` selects an existing one. Use dummy data for development and acceptance.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development and review expectations.
-
-## Settings
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `workspaceBridge.autoStart` | `false` | Start automatically in a trusted workspace. Permission switches still begin disabled. |
-| `workspaceBridge.port` | `3338` | Preferred local port. If occupied, the next nine ports are tried. Use `0` to request an available port. |
-| `workspaceBridge.allowedHosts` | `[]` | Additional exact hostnames for user-managed forwarding, without scheme, port, or wildcard. Local loopback access remains available. |
-
-These are machine-scoped settings. Editing and terminal grants are session controls in the local panel, rather than persistent workspace settings.
-
-## Troubleshooting
-
-| Symptom | Check |
+| Resource | Purpose |
 | --- | --- |
-| The client cannot connect | Confirm the bridge is running. Copy the configuration again to obtain the current port. Confirm the client supports Streamable HTTP. |
-| Authentication fails | Use the configuration for this window. Recopy it after token rotation, window reload/reopen, or a workspace change. Never paste a token into a public issue. |
-| A workspace request is rejected | Discover the active workspace again. A configuration for a different window or stale workspace must not be reused blindly. |
-| A file is denied | Check Workspace Trust, workspace-relative paths, sensitive names, symlinks, and read limits. |
-| A write fails with a conflict | Re-read the current file and reconcile the content before writing. |
-| A command does not execute | Enable terminal access locally and approve the individual command. A rejected or unattended approval does not authorize execution. |
-| A remote connector fails | Check HTTPS forwarding, allowed hosts, preserved authorization headers, and the connector's authentication requirements. |
+| [Setup & troubleshooting](docs/GETTING-STARTED.md) | Installation, settings, token lifecycle, and connection errors |
+| [Tools & examples](docs/TOOLS.md) | Schemas, line conventions, editing workflow, and error handling |
+| [Remote access](docs/REMOTE-ACCESS.md) | HTTPS forwarding, host validation, and remote environments |
+| [Related projects & design notes](docs/RELATED-PROJECTS.md) | Comparable bridges, design references, and future work |
+| [Contributing](CONTRIBUTING.md) · [Release notes](CHANGELOG.md) | Development expectations and changes |
+| [Acknowledgements](docs/ACKNOWLEDGEMENTS.md) · [Third-party notices](THIRD_PARTY_NOTICES.md) | Upstream inspiration and dependency licenses |
 
-When reporting a problem, include the extension version, OS, VS Code version, client version, and a reproduction with dummy files. Remove secrets and private content. Use [private reporting](SECURITY.md) for vulnerabilities.
-
-## License and acknowledgements
-
-[MIT](LICENSE), with dependency licenses preserved in [third-party notices](THIRD_PARTY_NOTICES.md). See [acknowledgements](docs/ACKNOWLEDGEMENTS.md) for the upstream inspiration and protocol SDK. This project is a new implementation and does not imply endorsement by VS Code, upstream projects, or MCP client vendors.
+Released under the [MIT license](LICENSE). This project does not imply endorsement by VS Code, MCP client vendors, or upstream projects.

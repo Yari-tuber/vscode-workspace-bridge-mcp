@@ -3,6 +3,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { createMcpServer } = require('./tools');
+const { version: VERSION } = require('../package.json');
 
 function json(res, status, value) {
   if (res.headersSent || res.destroyed) return;
@@ -43,7 +44,7 @@ async function startServer({ host, token, port = 3338, allowedHosts = [], audit 
     }
     if (Date.now() - windowStart > 60000) { windowStart = Date.now(); count = 0; }
     if (++count > 240 || active >= 6 || closed) return json(res, 429, { error: 'Too many authenticated requests. Retry shortly.' });
-    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { status: 'ready', version: '0.1.0' });
+    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { status: 'ready', version: VERSION });
     if (req.url !== '/mcp') return json(res, 404, { error: 'Not found.' });
     if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { error: 'Use stateless Streamable HTTP POST.' }); }
     if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) return json(res, 415, { error: 'Use application/json.' });

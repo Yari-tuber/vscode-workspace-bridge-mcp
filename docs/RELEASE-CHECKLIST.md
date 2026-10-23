@@ -4,7 +4,7 @@ Use this checklist for the exact commit and VSIX being published. Check a box on
 
 ## Release identity
 
-- Version: `0.1.0`
+- Version: `0.2.0`
 - Repository: [Yari-tuber/vscode-workspace-bridge-mcp](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp).
 - Commit: record in the GitHub release.
 - Package SHA-256: publish beside the VSIX.
@@ -21,7 +21,7 @@ Use this checklist for the exact commit and VSIX being published. Check a box on
 - [ ] Inspect third-party licenses and ensure required notices are preserved.
 - [ ] Confirm the package includes only intended runtime files, license, notices, and user documentation.
 - [ ] Run the repository's declared checks, tests, build, and packaging command on the release commit.
-- [ ] Run `npm run privacy -- --vsix artifacts/workspace-bridge-mcp-0.1.0.vsix` and manually review the package manifest. A heuristic scan is not a substitute for inspection.
+- [ ] Run `npm run verify:package` and manually review the package manifest. A heuristic scan is not a substitute for inspection.
 - [ ] Verify the VSIX file name, manifest version, and SHA-256 digest.
 - [ ] Enable GitHub private vulnerability reporting and verify the link in `SECURITY.md`.
 

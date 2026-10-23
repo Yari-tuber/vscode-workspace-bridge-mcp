@@ -37,7 +37,7 @@ test('official SDK client initializes, browses, reads, and obtains a review prom
   const client = new Client({ name: 'integration-client', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
   await client.connect(transport); t.after(() => client.close());
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 11);
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 15);
   const overview = value(await client.callTool({ name: 'workspace_overview', arguments: {} }));
   assert.equal(overview.workspaceId, 'test-session'); assert.equal(JSON.stringify(overview).includes(root), false);
   const read = value(await client.callTool({ name: 'read_file', arguments: { workspaceId: overview.workspaceId, path: 'hello.js' } }));
@@ -64,7 +64,7 @@ test('HTTP boundary rejects missing/wrong credentials, foreign hosts/origins, qu
     assert.equal((await fetch(server.url, { method: 'POST', headers: auth, body })).status, 400);
   }
   const health = await fetch(server.url.replace('/mcp', '/health'), { headers: auth });
-  assert.equal(health.status, 200); assert.deepEqual(await health.json(), { status: 'ready', version: '0.1.0' });
+  assert.equal(health.status, 200); assert.deepEqual(await health.json(), { status: 'ready', version: require('../package.json').version });
   assert.equal((await fetch(server.url, { headers: auth })).status, 405);
   assert.equal((await fetch(server.url, { method: 'POST', headers: auth, body: JSON.stringify({ data: 'x'.repeat(512 * 1024) }) })).status, 413);
 });

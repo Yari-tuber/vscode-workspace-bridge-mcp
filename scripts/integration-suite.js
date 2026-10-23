@@ -56,6 +56,24 @@ async function run() {
       const result = await client.callTool({ name: 'write_file', arguments: { ...args, expectedHash: 'new', text: 'not allowed' } });
       assert.equal(result.isError, true); assert.match(result.content[0].text, /ACCESS_DENIED/);
     });
+    await check('active editor context is metadata-first and selection text requires an explicit request', async () => {
+      const editor = await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'hello.js')), { preview: false });
+      editor.selection = new vscode.Selection(0, 6, 0, 12);
+      const metadata = data(await client.callTool({ name: 'get_editor_context', arguments: { workspaceId: overview.workspaceId } }));
+      assert.equal(metadata.path, 'hello.js'); assert.equal(Object.hasOwn(metadata, 'selectedText'), false);
+      const selected = data(await client.callTool({ name: 'get_editor_context', arguments: { workspaceId: overview.workspaceId, includeSelection: true } }));
+      assert.equal(selected.selectedText, 'answer'); assert.equal(JSON.stringify(selected).includes(root), false);
+    });
+    await check('hover uses the real VS Code language-provider API without returning trusted objects', async () => {
+      const provider = vscode.languages.registerHoverProvider({ language: 'javascript', scheme: 'file' }, {
+        provideHover: () => new vscode.Hover('Synthetic hover information', new vscode.Range(0, 6, 0, 12))
+      });
+      try {
+        const result = data(await client.callTool({ name: 'get_hover', arguments: { ...args, line: 0, character: 8 } }));
+        assert.equal(result.hovers.some(item => item.contents.some(text => text.includes('Synthetic hover information'))), true);
+        assert.equal(result.untrusted, true); assert.equal(JSON.stringify(result).includes('baseUri'), false);
+      } finally { provider.dispose(); }
+    });
     access.edit = true;
     const current = data(await client.callTool({ name: 'read_file', arguments: args }));
     await check('real editor diff and hash-guarded save', async () => {
@@ -67,6 +85,22 @@ async function run() {
     await check('stale content hash cannot overwrite a real edited document', async () => {
       const result = await client.callTool({ name: 'write_file', arguments: { ...args, text: 'stale overwrite', expectedHash: current.hash } });
       assert.equal(result.isError, true); assert.match(result.content[0].text, /EDIT_CONFLICT/);
+    });
+    await check('unique replacement previews without writing and explicitly applies through the real editor', async () => {
+      const snapshot = data(await client.callTool({ name: 'read_file', arguments: args }));
+      const request = { ...args, oldText: '43', newText: '44', expectedHash: snapshot.hash };
+      const preview = data(await client.callTool({ name: 'replace_text', arguments: request }));
+      assert.equal(preview.applied, false); assert.match(await fs.readFile(path.join(root, 'hello.js'), 'utf8'), /43/);
+      const saved = data(await client.callTool({ name: 'replace_text', arguments: { ...request, previewOnly: false } }));
+      assert.equal(saved.applied, true); assert.equal(saved.hash, hashText(await fs.readFile(path.join(root, 'hello.js'), 'utf8')));
+    });
+    await check('range edits preview by default and save only after an explicit apply', async () => {
+      const snapshot = data(await client.callTool({ name: 'read_file', arguments: args }));
+      const request = { ...args, expectedHash: snapshot.hash, edits: [{ range: { start: { line: 0, character: 15 }, end: { line: 0, character: 17 } }, text: '45' }] };
+      const preview = data(await client.callTool({ name: 'apply_text_edits', arguments: request }));
+      assert.equal(preview.applied, false); assert.match(await fs.readFile(path.join(root, 'hello.js'), 'utf8'), /44/);
+      const saved = data(await client.callTool({ name: 'apply_text_edits', arguments: { ...request, previewOnly: false } }));
+      assert.equal(saved.applied, true); assert.match(await fs.readFile(path.join(root, 'hello.js'), 'utf8'), /45/);
     });
     await check('new file preview and creation are supported without overwriting', async () => {
       const newArgs = { ...args, path: 'created.txt', expectedHash: 'new', text: 'Created in the isolated test workspace.\n' };

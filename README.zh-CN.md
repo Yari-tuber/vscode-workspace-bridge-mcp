@@ -1,42 +1,73 @@
 # Workspace Bridge MCP
 
-<img src="media/icon.png" width="88" height="88" alt="Workspace Bridge MCP：连接代码括号的工作区桥梁" />
+<p align="center">
+  <img src="media/readme-hero.png" alt="Workspace Bridge MCP — 连接你的工作区，权限留在你手中。" width="1280" />
+</p>
 
-[![自动检查](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml) · [MIT 开源许可](LICENSE) · [验收记录](docs/VALIDATION.md)
+<p align="center">
+  <a href="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml"><img src="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml/badge.svg" alt="自动检查" /></a>
+  <a href="https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases"><img src="https://img.shields.io/github/v/release/Yari-tuber/vscode-workspace-bridge-mcp?color=55cdb0&amp;label=release" alt="最新版本" /></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/VS_Code-1.96%2B-007ACC" alt="需要 VS Code 1.96 或更新版本" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-94a3b8" alt="MIT 开源许可" /></a>
+</p>
 
-图标用代码括号和中间的连接线表示：让编辑器与 AI 客户端通过明确的工作区权限相连。
-[English](README.md) · [简体中文](README.zh-CN.md) · [安全政策](SECURITY.md)
+<p align="center">
+  <a href="README.md">English</a> · <strong>简体中文</strong><br />
+  <a href="#三步开始使用">开始使用</a> · <a href="docs/TOOLS.md">工具参考</a> · <a href="docs/GETTING-STARTED.md#中文上手指南">配置指南</a> · <a href="SECURITY.md">安全政策</a>
+</p>
 
-让 MCP 客户端访问 VS Code 中打开的工作区：读取项目文件、查看代码诊断，并通过 AI 工具完成可控的文件修改。权限开关保留在本地编辑器中。
+**让 AI 客户端用上 VS Code 已有的项目上下文。** 读取实时文件、跟踪代码符号、查看诊断、准备精确修改，访问权限由本地编辑器控制。
 
-默认开放读取。编辑和终端执行需要在本地为当前会话启用，终端命令还需要逐次批准。服务只监听本机回环地址，强制使用 Bearer Token；不会自动创建公网隧道，也不收集遥测。
+Workspace Bridge 是**运行在 VS Code 中的 MCP 服务端**，供外部 MCP 客户端连接。VS Code 内置 MCP 支持的方向相反：让 VS Code 作为客户端调用其他服务。要把当前工作区提供出去，无须再把本扩展配置成 VS Code 内部的 MCP 服务。
 
-**0.1.0** 为早期版本。目前以 Windows 作为验证平台；macOS、Linux 是目标平台，尚需分别验收。具体发布证据范围见[发布检查表](docs/RELEASE-CHECKLIST.md)。
+> **连接要求：**客户端支持 Streamable HTTP 和自定义 `Authorization: Bearer …` 请求头。Bearer 认证不等于 OAuth；强制要求 OAuth 的在线连接器可能不兼容。本扩展不会自动创建公网隧道。
 
-## 可以做什么
+![VS Code 中真实运行的 Workspace Bridge 连接面板与示例代码](media/screenshots/control-panel.jpg)
 
-| 用途 | 权限边界 |
+*v0.2.0 隔离开发配置中的真实截图，使用专门创建的演示项目，不包含密钥或个人项目。顶部横幅和下方流程图为原创示意图。*
+
+## 三步开始使用
+
+1. **安装。** 从 [Releases](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases/latest) 下载 `.vsix`，核对 SHA-256，在 VS Code 选择 **扩展 → … → 从 VSIX 安装…**。
+2. **启动。** 打开可信任的文件夹，在活动栏进入 **Workspace Bridge / 工作区桥接**，点击 **启动桥接**，确认面板显示的工作区。
+3. **连接。** 点击 **复制客户端配置**，填入兼容的 MCP 客户端，再使用 **复制起步提示词**，先发现工作区并读取内容。
+
+启动后默认允许读取；编辑和终端执行需要你在本地开启。每个窗口有独立 Token。连接配置包含这个秘密，请放入客户端受保护的设置，不要提交到仓库或粘贴进聊天。
+
+[详细安装、客户端配置与故障排查 →](docs/GETTING-STARTED.md#中文上手指南)
+
+## 用编辑器里的上下文完成工作
+
+| 你想做的事 | 桥接提供的能力 |
 | --- | --- |
-| 识别当前工作区、发现可用能力 | 请求携带工作区标识；过期或不匹配的请求会被拒绝。 |
-| 列目录、搜索和读取项目文件 | 检查工作区信任、真实路径边界、敏感文件名和读取大小。 |
-| 查看 VS Code 诊断 | 返回编辑器现有诊断，不会替你安装或运行语言服务器。 |
-| 创建或更新项目文件 | 本地启用本次会话的编辑权限；更新已有文件需要匹配 SHA-256。 |
-| 执行终端命令 | 本地启用本次会话的终端权限，再对每条命令单独批准。 |
-| 管理连接 | 本地控制面板、快捷操作选择、状态栏、Token 轮换与连接配置复制。 |
+| **熟悉项目** | 工作区标识、安全入口文件样本、文件列表、字面文本搜索和实时文件读取，包括尚未保存的编辑内容。 |
+| **理解代码** | 编辑器现有诊断、文档符号、定义、引用、悬停类型提示，以及当前文件与选区位置。语言功能依赖已安装的语言服务。 |
+| **精确修改** | 本地差异预览、SHA-256 冲突检查、全文写入、范围编辑和唯一字面文本替换。范围编辑与文本替换**默认只预览**。 |
+| **运行必要检查** | 本地启用终端权限、逐条批准命令后，执行有时间和输出限制的终端检查。 |
+| **管理连接** | 本地控制面板、状态栏、连接配置复制、Token 轮换、起步提示词与脱敏的桥接诊断报告。 |
 
-工具名称、参数及读取后修改的操作顺序见[工具参考](docs/TOOLS.md)。
+服务提供 **15 个工具**和 `review_workspace` 提示词。[工具参考](docs/TOOLS.md)列出参数、结果限制及读取—预览—修改顺序。选区正文仅在客户端明确请求时返回。
 
-## 安装与连接
+<p align="center">
+  <img src="media/readme-workflow.png" alt="外部 MCP 客户端通过带 Bearer 认证的 Streamable HTTP 连接 VS Code 中的 Workspace Bridge，再由编辑器 API 访问可信工作区。默认先读取，编辑需本地开启，终端命令逐条批准。" width="1280" />
+</p>
 
-1. 在 [GitHub Releases](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases) 下载 `.vsix`，核对发布页提供的 SHA-256。
-2. 在 VS Code 打开 **扩展 → … → 从 VSIX 安装…**，选择下载的文件。
-3. 打开可信任的文件夹，在活动栏进入 **Workspace Bridge / 工作区桥接** 面板并点击 **启动桥接**。也可以在命令面板运行 **启动桥接**（`workspaceBridge.start`）。
-4. 确认面板显示的工作区，复制连接配置。首选端口被占用时，实际端口可能变化。
-5. 将配置添加到可信任的 MCP 客户端。客户端需要支持 **Streamable HTTP** 和 **Authorization 请求头**。先用测试文件完成一次读取。
+## 权限清楚，操作可控
 
-连接配置包含 Bearer Token。请存入客户端受保护的设置中，不要提交到仓库或粘贴到聊天、公开问题中；同时留意系统剪贴板历史。每个 VS Code 窗口有独立 Token，即使打开同一个文件夹也不共用。重载或重新打开窗口后会生成新 Token，需要重新复制配置。
+| 能力 | 初始状态 | 本地控制方式 |
+| --- | --- | --- |
+| 读取允许的文件与编辑器上下文 | 在可信工作区启动服务后可用 | 停止桥接即可结束访问；文件工具检查选定工作区边界并过滤敏感内容。 |
+| 预览或保存修改 | **关闭** | 为当前会话开启编辑。修改已有文件需要当前 SHA-256，旧快照会被拒绝。 |
+| 执行终端命令 | **关闭** | 先开启终端权限，再对**每条命令**及其工作目录批准。 |
+| 远程连接 | 仅监听本机回环地址 | 自行配置 HTTPS 转发和允许的主机名，见[远程访问](docs/REMOTE-ACCESS.md)。 |
 
-不同客户端的配置格式可能不同。下面展示连接信息的结构，实际值以运行中面板复制的内容为准：
+停止服务或切换工作区会重置编辑和终端权限。重载窗口会生成新 Token；主动轮换会立即撤销旧 Token。请使用目标窗口的连接配置，并在修改前重新确认工作区。
+
+**获批终端命令使用你的操作系统账户权限，不在沙箱中运行。** 它可以访问工作区之外的文件，也可以联网。
+
+## 连接客户端
+
+从正在运行的面板复制实际配置。以下仅展示结构，不同客户端的配置格式可能不同：
 
 ```json
 {
@@ -44,37 +75,35 @@
     "workspace-bridge": {
       "type": "http",
       "url": "http://127.0.0.1:<PORT>/mcp",
-      "headers": {
-        "Authorization": "Bearer <TOKEN>"
-      }
+      "headers": { "Authorization": "Bearer <TOKEN>" }
     }
   }
 }
 ```
 
-`<PORT>`、`<TOKEN>` 是占位符。部分客户端使用其他传输名称或配置结构；只支持 stdio 的客户端不能直接使用这个 HTTP 地址。本版本不提供 OAuth 授权服务器，因此要求 OAuth 或不能自定义请求头的在线连接器可能不兼容。
+`<PORT>`、`<TOKEN>` 是占位符。只支持 stdio 的客户端需要自行添加 HTTP 适配层。远程客户端需要自建 HTTPS 转发；本版本没有 OAuth 授权服务器、自动隧道或多窗口路由器。
 
-## 编辑与终端
+可以这样发起第一轮请求：
 
-修改文件前，先读取文件并保留返回的 SHA-256，在本地面板启用编辑，再携带该哈希提交新内容。桥接会在本实例内串行处理同一文件的写入，并在实际应用前复核当前内容。若文件已经变化，应重新读取并合并内容；不要直接换一个新哈希强行重试。
+> 先发现当前工作区，读取 README 并查看现有代码诊断。用文件位置说明你的发现。不要修改文件，也不要运行终端命令。
 
-终端默认关闭。启用后，编辑器仍会对每条命令要求本地批准。批准前确认命令和工作目录。命令使用系统 Shell 和你当前操作系统账户的权限执行，**这不是沙箱**：获批命令可以访问工作区之外的文件，也可以联网。
+## 隐私保护与实际边界
 
-停止服务或切换工作区会重置编辑和终端权限。同一窗口内停止再启动会复用 Token，主动轮换可立即撤销旧凭据。重载窗口或切换工作区后会生成新 Token；扩展正常退出时删除当前 SecretStorage 记录。Token 改变后需要更新客户端保存的配置。
+- **默认留在本机。** 回环地址监听、Bearer 认证、VS Code SecretStorage，无遥测。主动复制配置会将 Token 写入剪贴板和所选客户端。
+- **文件访问受限。** 相对路径、真实路径检查、链接拒绝、敏感文件名/内容过滤和结果大小限制；过滤无法识别所有秘密，也不提供操作系统隔离。
+- **桥接记录尽量精简。** 活动日志和导出的桥接报告不含文件正文、终端输出、Token 或用户绝对路径。按请求返回的文件、语言服务和命令结果仍会发给客户端，并受它的保留政策影响。
 
-## 隐私与安全
+开放远程端点或启用终端前，请阅读[安全政策](SECURITY.md)、[威胁模型](docs/THREAT-MODEL.md)和[审计说明](docs/SECURITY-AUDIT.md)。扫描和测试通过不能证明完全没有漏洞。
 
-- Token 通过 VS Code SecretStorage 保存；手动复制 Token 或连接配置会将秘密写入剪贴板和所选客户端。
-- 文件工具按工作区相对路径检查真实位置，拒绝符号链接、目录联接和多硬链接文件，并在异步加载编辑器后、修改操作前后重新校验。这些检查降低风险，但不提供操作系统隔离，无法保证挡住本机恶意进程极速替换文件路径。常见敏感文件名和可识别凭据格式会被过滤，仍无法识别所有秘密。
-- 本地活动记录与导出的桥接诊断报告仅保留运行元数据，不包含文件正文、终端输出、Bearer Token 或用户绝对路径。工具按需返回的代码诊断属于另一类结果，其中包含编辑器错误信息。
-- 文件内容和命令结果返回给 MCP 客户端后，由该客户端及其模型提供商的日志、存储和保留政策决定后续处理方式。
-- 远程访问需要你自行配置 TLS 转发、Host 允许列表和 Bearer 认证。公开端点前请阅读[远程访问说明](docs/REMOTE-ACCESS.md)。
+## 验证范围与兼容性
 
-详细边界见[安全政策](SECURITY.md)、[威胁模型](docs/THREAT-MODEL.md)和[审计说明](docs/SECURITY-AUDIT.md)。扫描无命中、测试通过不能证明完全没有漏洞，也不能证明历史安装从未发生过信息披露。
+发布流程在 **Windows、macOS、Linux** 上检查构建、单元测试、打包和隐私；另在隔离的 **Windows 与 Linux** 环境运行过真实编辑器集成检查。具体版本的证据以[验收记录](docs/VALIDATION.md)与 [CI 运行](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/actions/workflows/ci.yml)为准。
 
-## 从源码构建
+需要 **VS Code 1.96+**。WSL、SSH、容器及其他远程扩展宿主需单独验收；“本机”指实际运行扩展宿主的机器。客户端是否兼容取决于传输和认证能力，不能仅凭产品名称判断。
 
-使用 `package.json` 所支持的 Node.js 和 npm 版本：
+## 构建与参与贡献
+
+需要 **Node.js 22+**：
 
 ```sh
 git clone https://github.com/Yari-tuber/vscode-workspace-bridge-mcp.git
@@ -87,34 +116,15 @@ npm run test:integration
 npm run package
 ```
 
-需要 **VS Code 1.96 或更新版本**；源码构建需要 **Node.js 22 或更新版本**。集成脚本使用独立的 VS Code 配置和临时工作区；若未通过 `VSCODE_EXECUTABLE` 指定现有程序，会下载 VS Code 测试版本。打包产物位于 `artifacts/workspace-bridge-mcp-0.1.0.vsix`。开发与验收请使用只含虚构数据的临时工作区。
+集成测试使用独立 VS Code 配置和临时工作区；未通过 `VSCODE_EXECUTABLE` 指定现有程序时，会下载测试运行时。开发与验收请使用虚构数据。
 
-开发和代码审查约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 设置
-
-| 设置项 | 默认值 | 用途 |
-| --- | --- | --- |
-| `workspaceBridge.autoStart` | `false` | 在可信工作区自动启动；权限开关仍从关闭状态开始。 |
-| `workspaceBridge.port` | `3338` | 首选本地端口；占用时尝试后续 9 个端口。填 `0` 可直接请求可用端口。 |
-| `workspaceBridge.allowedHosts` | `[]` | 用户自行转发时允许的额外精确主机名，不填协议、端口或通配符；本机回环访问仍可使用。 |
-
-以上为机器级设置。编辑与终端授权通过本地面板管理，仅限当前会话，不存成工作区永久授权。
-
-## 常见问题
-
-| 现象 | 检查方向 |
+| 继续了解 | 内容 |
 | --- | --- |
-| 客户端无法连接 | 确认服务已启动，重新复制配置取得实际端口，确认客户端支持 Streamable HTTP。 |
-| 认证失败 | 使用当前窗口的配置；轮换 Token、重载或重开窗口、切换工作区后重新复制。不要在公开问题中贴 Token。 |
-| 工作区请求被拒绝 | 重新发现当前工作区。不要直接复用另一个窗口或旧工作区的标识。 |
-| 文件访问被拒绝 | 检查工作区信任、相对路径、敏感文件名、符号链接和读取限制。 |
-| 写入发生冲突 | 重新读取当前文件，合并内容后再提交。 |
-| 命令没有执行 | 在本地启用终端权限，并批准该次请求。拒绝或无人处理的请求不构成授权。 |
-| 在线连接器不兼容 | 检查 HTTPS 转发、Host 允许列表、认证头透传，以及连接器本身的认证要求。 |
+| [配置与故障排查](docs/GETTING-STARTED.md#中文上手指南) | 安装、设置、Token 生命周期和连接错误 |
+| [工具与示例](docs/TOOLS.md) | 参数、行号约定、编辑流程和错误处理 |
+| [远程访问](docs/REMOTE-ACCESS.md) | HTTPS 转发、Host 校验和远程环境 |
+| [相关项目与设计参考](docs/RELATED-PROJECTS.md) | 同类桥接、实现参考和后续方向 |
+| [贡献指南](CONTRIBUTING.md) · [版本记录](CHANGELOG.md) | 开发约定与变更内容 |
+| [项目致谢](docs/ACKNOWLEDGEMENTS.md) · [第三方声明](THIRD_PARTY_NOTICES.md) | 上游参考与依赖许可证 |
 
-报告问题时，提供扩展、系统、VS Code 和客户端版本，以及使用虚构文件的复现步骤。删去秘密与私人内容；安全漏洞请走[私密报告流程](SECURITY.md)。
-
-## 许可证与致谢
-
-采用 [MIT 许可证](LICENSE)，依赖的原始版权和许可文本保留于[第三方声明](THIRD_PARTY_NOTICES.md)。上游灵感及协议 SDK 见[致谢](docs/ACKNOWLEDGEMENTS.md)。本项目为全新实现，不代表 VS Code、上游项目或客户端厂商的背书。
+采用 [MIT 许可证](LICENSE)。本项目不代表 VS Code、MCP 客户端厂商或上游项目的背书。

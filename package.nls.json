@@ -15,5 +15,6 @@
   "configuration.title": "Workspace Bridge MCP",
   "configuration.autoStart": "Start a local read-only bridge when this trusted workspace opens. Edit and terminal permissions always require approval for each session.",
   "configuration.port": "Preferred local port. If occupied, the bridge tries the next 9 ports and displays the actual endpoint. Use 0 for an automatically assigned port.",
-  "configuration.allowedHosts": "Additional exact HTTP Host names accepted by the local server. Empty by default. This does not create a tunnel or enable a public listener. Only configure names you control."
+  "configuration.allowedHosts": "Additional exact HTTP Host names accepted by the local server. Empty by default. This does not create a tunnel or enable a public listener. Only configure names you control.",
+  "command.copyPrompt": "Copy Starter Prompt"
 }

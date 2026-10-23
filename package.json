@@ -2,7 +2,7 @@
   "name": "vscode-workspace-bridge-mcp",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "workspace-bridge",
   "license": "MIT",
   "engines": {
@@ -102,6 +102,12 @@
         "title": "%command.exportDiagnostics%",
         "icon": "$(output)",
         "category": "%command.category%"
+      },
+      {
+        "command": "workspaceBridge.copyPrompt",
+        "title": "%command.copyPrompt%",
+        "category": "%command.category%",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {

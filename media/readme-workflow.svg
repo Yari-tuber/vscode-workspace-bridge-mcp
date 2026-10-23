@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="330" viewBox="0 0 1280 330" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">How Workspace Bridge MCP connects</title>
+  <desc id="desc">An external MCP client connects over authenticated Streamable HTTP to the VS Code extension, which uses editor APIs inside the trusted workspace. Reading is available by default; editing is opt-in and each terminal command requires local approval.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1L8 5L1 9" stroke="#65D9C1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="1278" height="328" rx="20" fill="#0F1929" stroke="#2C3B51" stroke-width="2"/>
+  <text x="34" y="39" fill="#98AFC8" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2">ONE CONNECTION. LOCAL CONTROL.</text>
+  <rect x="34" y="68" width="302" height="166" rx="14" fill="#172639" stroke="#344A63"/>
+  <rect x="42" y="76" width="286" height="5" rx="2.5" fill="#7096D8"/>
+  <rect x="57" y="99" width="34" height="30" rx="7" fill="#233C59"/>
+  <path d="M65 110L70 114L65 118M76 119H83" stroke="#BDD2F3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="57" y="161" fill="#F1F5FB" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">Your MCP client</text>
+  <text x="57" y="189" fill="#B7C8DC" font-family="Arial, Helvetica, sans-serif" font-size="15">Discover, inspect, propose a change</text>
+  <text x="57" y="213" fill="#89A0BA" font-family="Arial, Helvetica, sans-serif" font-size="13">AI application or an SDK client</text>
+  <path d="M351 149H468" stroke="#65D9C1" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="410" y="122" text-anchor="middle" fill="#AFDCCE" font-family="Arial, Helvetica, sans-serif" font-size="13">Streamable HTTP</text>
+  <text x="410" y="178" text-anchor="middle" fill="#8FA7C1" font-family="Arial, Helvetica, sans-serif" font-size="12">Bearer token</text>
+  <rect x="488" y="68" width="302" height="166" rx="14" fill="#172D35" stroke="#3B655E"/>
+  <rect x="496" y="76" width="286" height="5" rx="2.5" fill="#64DDC1"/>
+  <rect x="511" y="99" width="34" height="30" rx="7" fill="#254840"/>
+  <path d="M522 107H518V121H522M534 107H538V121H534M523 114H533M528 109V119" stroke="#B5F5E5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="511" y="161" fill="#F1F5FB" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">Workspace Bridge</text>
+  <text x="511" y="189" fill="#B7D8D0" font-family="Arial, Helvetica, sans-serif" font-size="15">MCP server inside VS Code</text>
+  <text x="511" y="213" fill="#8EB7AC" font-family="Arial, Helvetica, sans-serif" font-size="13">Authentication + workspace boundary</text>
+  <path d="M810 149H927" stroke="#65D9C1" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="869" y="122" text-anchor="middle" fill="#AFDCCE" font-family="Arial, Helvetica, sans-serif" font-size="13">VS Code APIs</text>
+  <text x="869" y="178" text-anchor="middle" fill="#8FA7C1" font-family="Arial, Helvetica, sans-serif" font-size="12">Live editor context</text>
+  <rect x="947" y="68" width="299" height="166" rx="14" fill="#172639" stroke="#344A63"/>
+  <rect x="955" y="76" width="283" height="5" rx="2.5" fill="#A3A4E8"/>
+  <rect x="970" y="99" width="34" height="30" rx="7" fill="#303952"/>
+  <path d="M978 109H985L988 112H997V122H978V109Z" stroke="#D5D3FC" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="970" y="161" fill="#F1F5FB" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">Trusted workspace</text>
+  <text x="970" y="189" fill="#B7C8DC" font-family="Arial, Helvetica, sans-serif" font-size="15">Files, symbols and diagnostics</text>
+  <text x="970" y="213" fill="#89A0BA" font-family="Arial, Helvetica, sans-serif" font-size="13">The folder open in this editor window</text>
+  <path d="M34 256H1246" stroke="#293B51"/>
+  <circle cx="49" cy="289" r="5" fill="#79E7CE"/>
+  <text x="64" y="295" fill="#D5DFEC" font-family="Arial, Helvetica, sans-serif" font-size="16">Read access first</text>
+  <circle cx="419" cy="289" r="5" fill="#79E7CE"/>
+  <text x="434" y="295" fill="#D5DFEC" font-family="Arial, Helvetica, sans-serif" font-size="16">Editing enabled locally</text>
+  <circle cx="859" cy="289" r="5" fill="#79E7CE"/>
+  <text x="874" y="295" fill="#D5DFEC" font-family="Arial, Helvetica, sans-serif" font-size="16">Approve each terminal command</text>
+</svg>

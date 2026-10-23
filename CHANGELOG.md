@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+- Added on-demand active editor context. Selection text is excluded unless explicitly requested.
+- Added bounded, timeout-controlled hover documentation through VS Code's language service.
+- Added hash-guarded range edits and unique literal replacements, both previewing by default. UTF-16 coordinates and mixed line endings are validated; ambiguous, overlapping and malformed Unicode edits are refused.
+- Added a token-free starter prompt in the sidebar and command palette.
+- Redesigned the English and Chinese READMEs with original diagrams, real screenshots from an isolated synthetic project, a three-step quick start, and a detailed setup guide.
+- Documented related open-source projects and the scope of independently implemented improvements.
+
+
 ## 0.1.0 — 2026-10-23
 
 Initial open-source implementation of Workspace Bridge MCP.

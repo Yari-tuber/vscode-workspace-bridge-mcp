@@ -19,7 +19,7 @@ function safeEnvironment(source = process.env) {
   return Object.fromEntries(Object.entries(source).filter(([key]) => ENV_ALLOWLIST.has(key.toUpperCase())));
 }
 
-function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defaultSecurity, approvalTimeoutMs = 30_000 }) {
+function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defaultSecurity, approvalTimeoutMs = 30_000, languageTimeoutMs = 10_000 }) {
   const { BridgeError, assertWorkspace, resolvePath, assertSafeContent, toRelative, hashText } = security;
   let epoch = crypto.randomBytes(16).toString('hex');
   let rootBindings;
@@ -27,6 +27,7 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
   const pendingApprovals = new Set();
   const fileLocks = new Map();
   const previews = new Map();
+  const providerTimeoutMs = Number.isInteger(languageTimeoutMs) && languageTimeoutMs > 0 ? Math.min(languageTimeoutMs, 30_000) : 10_000;
   const scheme = `workspace-bridge-preview-${crypto.randomBytes(6).toString('hex')}`;
   const provider = vscode.workspace.registerTextDocumentContentProvider(scheme, {
     provideTextDocumentContent(uri) { return previews.get(uri.toString()) || ''; },
@@ -279,6 +280,99 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
     return (symbols || []).map(symbol => serializeSymbol(symbol, remaining, workspace)).filter(Boolean);
   }
 
+  async function getEditorContext({ workspaceId, includeSelection = false } = {}) {
+    const workspace = snapshot(workspaceId);
+    const editor = vscode.window.activeTextEditor;
+    const document = editor?.document;
+    if (!document || document.uri.scheme !== 'file' || !relativeInput(workspace, document.uri.fsPath)) return { active: false };
+    const initialVersion = document.version;
+    const initialUri = document.uri.toString();
+    const primarySelection = editor.selection;
+    const selection = rangeValue(primarySelection);
+    const allSelections = editor.selections || (editor.selection ? [editor.selection] : []);
+    const selections = allSelections.slice(0, 20).map(rangeValue);
+    function recheckEditor() {
+      recheck(workspace);
+      const active = vscode.window.activeTextEditor;
+      if (active !== editor || active.document !== document || document.uri.toString() !== initialUri || document.version !== initialVersion) {
+        fail('EDITOR_CHANGED', 'The active editor changed. Request its context again.');
+      }
+    }
+    const absolutePath = await checkedPath(workspace, document.uri.fsPath);
+    const stat = await fs.stat(absolutePath);
+    recheckEditor();
+    if (stat.size > 512 * 1024) fail('FILE_TOO_LARGE', 'Files must be at most 512 KiB.');
+    const text = document.getText();
+    if (Buffer.byteLength(text, 'utf8') > 512 * 1024) fail('FILE_TOO_LARGE', 'The editor buffer is too large.');
+    assertSafeContent(text);
+    const result = { active: true, ...toRelative(workspace, absolutePath), languageId: document.languageId,
+      version: initialVersion, isDirty: document.isDirty, hash: hashText(text), selection,
+      selections, selectionCount: allSelections.length, selectionRangesTruncated: allSelections.length > 20 };
+    if (includeSelection === true) {
+      const selectedText = primarySelection ? document.getText(primarySelection) : '';
+      // Inspect the complete selection before truncating: a credential after
+      // the returned prefix must not turn an unsafe selection into a safe one.
+      assertSafeContent(selectedText);
+      result.selectedText = selectedText.slice(0, 8000);
+      result.selectionTruncated = selectedText.length > 8000;
+    }
+    await checkedPath(workspace, absolutePath);
+    recheckEditor();
+    return result;
+  }
+
+  async function getHover({ workspaceId, path: inputPath, line, character }) {
+    const workspace = snapshot(workspaceId);
+    const absolutePath = await checkedPath(workspace, inputPath);
+    if (!Number.isInteger(line) || line < 0 || !Number.isInteger(character) || character < 0) fail('INVALID_POSITION', 'Line and character must be non-negative integers.');
+    const stat = await fs.stat(absolutePath);
+    if (stat.size > 512 * 1024) fail('FILE_TOO_LARGE', 'Files must be at most 512 KiB.');
+    const document = await readForWorkspace(workspace, absolutePath);
+    if (Buffer.byteLength(document.text, 'utf8') > 512 * 1024) fail('FILE_TOO_LARGE', 'The editor buffer is too large.');
+    const lines = document.text.split(/\r\n|\r|\n/);
+    if (line >= lines.length || character > lines[line].length) fail('INVALID_POSITION', 'The position is outside the current document.');
+    recheck(workspace);
+    let timer;
+    let supplied;
+    try {
+      supplied = await Promise.race([
+        vscode.commands.executeCommand('vscode.executeHoverProvider', vscode.Uri.file(absolutePath), new vscode.Position(line, character)),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new BridgeError('LANGUAGE_TIMEOUT', 'The language service did not respond in time. Retry after it finishes loading.')), providerTimeoutMs); }),
+      ]);
+    } finally { clearTimeout(timer); }
+    await checkedPath(workspace, absolutePath);
+    const live = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
+    recheck(workspace);
+    if (live.version !== document.version) fail('DOCUMENT_CHANGED', 'The document changed while the language service was running. Request its hover again.');
+    const hovers = [];
+    let remaining = 12000;
+    let inspected = 0;
+    let truncated = (supplied || []).length > 5;
+    for (const hover of (supplied || []).slice(0, 5)) {
+      const contents = [];
+      const values = Array.isArray(hover.contents) ? hover.contents : [];
+      if (values.length > 20) truncated = true;
+      for (const content of values.slice(0, 20)) {
+        const raw = typeof content === 'string' ? content : content?.value;
+        if (typeof raw !== 'string') continue;
+        inspected += raw.length;
+        if (inspected > 128000) fail('RESULT_TOO_LARGE', 'The language service returned too much text. Try a more specific symbol.');
+        assertSafeContent(raw);
+        const safe = redactPaths(raw, workspace);
+        if (safe.length > remaining) truncated = true;
+        if (remaining > 0 && safe.length) contents.push(safe.slice(0, remaining));
+        remaining = Math.max(0, remaining - safe.length);
+      }
+      const range = hover.range?.start && hover.range?.end ? rangeValue(hover.range) : undefined;
+      const validRange = range && [range.start, range.end].every(position => Number.isInteger(position.line) && position.line >= 0
+        && position.line < lines.length && Number.isInteger(position.character) && position.character >= 0 && position.character <= lines[position.line].length)
+        && (range.start.line < range.end.line || (range.start.line === range.end.line && range.start.character <= range.end.character));
+      hovers.push({ contents, ...(validRange ? { range } : {}) });
+    }
+    recheck(workspace);
+    return { hovers, truncated, untrusted: true };
+  }
+
   async function locations(command, { path: inputPath, line, character, workspaceId }) {
     const workspace = snapshot(workspaceId);
     const absolutePath = await checkedPath(workspace, inputPath);
@@ -417,7 +511,7 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
 
   const host = {
     getWorkspace, getAccess: () => { const current = getAccess(); return { read: current.read === true, edit: current.edit === true, terminal: current.terminal === true }; },
-    readDocument, applyEdit, getDiagnostics, getSymbols,
+    readDocument, applyEdit, getDiagnostics, getSymbols, getEditorContext, getHover,
     getDefinition: input => locations('vscode.executeDefinitionProvider', input),
     getReferences: input => locations('vscode.executeReferenceProvider', input),
     previewDiff, showDocument, confirmTerminal, executeTerminal,

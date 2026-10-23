@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Workspace Bridge MCP</title>
+  <desc id="desc">Your workspace. Your controls. A VS Code extension connecting MCP clients to a trusted workspace.</desc>
+  <defs>
+    <linearGradient id="background" x1="24" y1="0" x2="1250" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D182B"/>
+      <stop offset="1" stop-color="#0B1120"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="934" y1="83" x2="1112" y2="272" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B0FAE4"/>
+      <stop offset="1" stop-color="#44D4BE"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" stroke="#94A3B8" stroke-opacity=".045"/>
+    </pattern>
+  </defs>
+  <rect x="1" y="1" width="1278" height="358" rx="22" fill="url(#background)" stroke="#26364D" stroke-width="2"/>
+  <rect x="2" y="2" width="1276" height="356" rx="21" fill="url(#grid)"/>
+  <path d="M796 1V359" stroke="#24344C"/>
+  <rect x="52" y="44" width="176" height="28" rx="14" fill="#162B39" stroke="#2A514F"/>
+  <circle cx="68" cy="58" r="4" fill="#79E7CE"/>
+  <text x="81" y="63" fill="#A7EDDD" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">VS CODE EXTENSION</text>
+  <text x="50" y="143" fill="#F4F7FC" font-family="Arial, Helvetica, sans-serif" font-size="49" font-weight="700" letter-spacing="-1.6">Workspace Bridge MCP</text>
+  <text x="52" y="191" fill="#A0F0DA" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="500" letter-spacing="-.4">Your workspace. Your controls.</text>
+  <text x="52" y="234" fill="#B4C3D7" font-family="Arial, Helvetica, sans-serif" font-size="19">Connect your AI client to the project open in VS Code.</text>
+  <path d="M52 272H727" stroke="#2A3A51"/>
+  <text x="52" y="306" fill="#CBD5E3" font-family="Arial, Helvetica, sans-serif" font-size="14">READ FIRST</text>
+  <circle cx="164" cy="301" r="2" fill="#4E7186"/>
+  <text x="181" y="306" fill="#CBD5E3" font-family="Arial, Helvetica, sans-serif" font-size="14">EDIT WITH CONTEXT</text>
+  <circle cx="354" cy="301" r="2" fill="#4E7186"/>
+  <text x="371" y="306" fill="#CBD5E3" font-family="Arial, Helvetica, sans-serif" font-size="14">APPROVE LOCALLY</text>
+  <rect x="875" y="65" width="318" height="230" rx="20" fill="#111F32" stroke="#30465F"/>
+  <path d="M875 108H1193" stroke="#30465F"/>
+  <circle cx="898" cy="86" r="4" fill="#4D6C86"/>
+  <circle cx="913" cy="86" r="4" fill="#4D6C86"/>
+  <circle cx="928" cy="86" r="4" fill="#4D6C86"/>
+  <text x="1174" y="91" text-anchor="end" fill="#91A8C1" font-family="Arial, Helvetica, sans-serif" font-size="11" letter-spacing="1.5">MCP / HTTP</text>
+  <g stroke="url(#bridge)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M983 141H957C951 141 946 146 946 152V245C946 251 951 256 957 256H983M1086 141H1112C1118 141 1123 146 1123 152V245C1123 251 1118 256 1112 256H1086"/>
+    <path d="M986 178L966 199L986 220M1083 178L1103 199L1083 220M1004 199H1065M1034 166V232"/>
+  </g>
+  <path d="M835 180H858M1210 180H1233" stroke="#44D4BE" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="830" cy="180" r="4" fill="#79E7CE"/>
+  <circle cx="1238" cy="180" r="4" fill="#79E7CE"/>
+</svg>

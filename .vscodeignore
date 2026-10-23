@@ -2,6 +2,7 @@
 !dist/extension.js
 !media/icon.svg
 !media/icon.png
+!media/**
 !package.json
 !package.nls.json
 !package.nls.zh-cn.json
