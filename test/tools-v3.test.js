@@ -69,5 +69,5 @@ test('async tasks return queued state without approval claims, default to metada
   assert.equal(value(await invokeTool(f.host, 'get_terminal_task', { ...scope, id: 'external-pid-1' })).error.code, 'INVALID_ARGUMENTS');
   f.access.read = false;
   assert.equal(value(await invokeTool(f.host, 'cancel_terminal_task', { ...scope, id: queued.id })).error.code, 'ACCESS_DENIED');
-  assert.equal(getToolCatalog().length, 27);
+  assert.equal(getToolCatalog().length, require('../src/tools').definitions.length);
 });

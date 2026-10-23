@@ -8,7 +8,7 @@ class BridgeError extends Error {
 }
 const deny = (code, message) => { throw new BridgeError(code, message); };
 function assertWorkspace(host, id, { capability = 'read' } = {}) {
-  if (!['read', 'edit', 'terminal'].includes(capability)) deny('ACCESS_DENIED', 'Unknown capability.');
+  if (!require('./permission-lease').CAPABILITIES.includes(capability)) deny('ACCESS_DENIED', 'Unknown capability.');
   const workspace = host.getWorkspace();
   if (!workspace?.trusted) deny('UNTRUSTED_WORKSPACE', 'Trust the workspace locally before starting the bridge.');
   if (!workspace.roots?.length || workspace.roots.some(r => typeof r.path !== 'string')) deny('NO_WORKSPACE', 'Open a local folder first.');

@@ -34,7 +34,7 @@ At startup:
 
 ### Your local control center
 
-The [control center](DASHBOARD.md) combines the current workspace, connection address, read/edit/terminal permissions, a searchable **27-tool directory**, background tasks, and recent request metadata. Search capabilities before enabling them; locked tools remain visible without becoming usable. The native sidebar remains available for compact controls.
+The [control center](DASHBOARD.md) combines the current workspace, connection address, read/edit/terminal permissions, a searchable **41-tool directory**, background tasks, and recent request metadata. Search capabilities before enabling them; locked tools remain visible without becoming usable. The native sidebar remains available for compact controls.
 
 Use **Manage access** when an authorized task needs editing or terminal access. The control center never displays the token, command text, file content, or task output. The separate **Copy client configuration** action does put a token on your clipboard. It supports keyboard operation, narrow editor groups, and VS Code light, dark, and high contrast themes.
 
@@ -108,7 +108,7 @@ Terminal access starts disabled. Enable it locally, then approve the individual 
 
 **This is not a sandbox.** Approved commands run as your operating-system account and can access files beyond the workspace, read configuration, and use the network. A limited subprocess environment and content filters do not remove those abilities.
 
-Choose `run_terminal` for a short check: the default timeout is 15 seconds and the maximum is 30 seconds. For longer bounded work, use `start_terminal_task`, which returns a task ID immediately while the local approval is still pending. Its default execution timeout is **120 seconds**, with a maximum of **600 seconds**. Approval expires after **30 seconds**; a returned ID is not approval or completion.
+Choose `run_terminal` for a short check: the default timeout is 15 seconds and the maximum is 30 seconds. For longer bounded work, use `start_terminal_task`, which returns a task ID immediately while the local approval is still pending. Its default execution timeout is **120 seconds**, with a maximum of **3,600 seconds**. Approval expires after **30 seconds**; a returned ID is not approval or completion.
 
 Poll `get_terminal_task` for progress. `awaiting_approval`, `running`, and `stopping` are active states; continue until a final result. At most **three active tasks**, including stopping processes, can exist at once. Use `list_terminal_tasks` for metadata or **Cancel task** in the control center to request cancellation of owned work. The bridge keeps active tasks plus up to **20 finished tasks** in memory for the current session.
 
@@ -185,7 +185,7 @@ For a public issue, include extension/OS/VS Code/client versions, a reproduction
 
 ### 用控制台掌握当前能力
 
-[集中控制台](DASHBOARD.md#中文说明)展示工作区、连接地址、读取/修改/终端权限、可搜索的 **27 个工具**、后台任务与最近请求元数据。未开放的工具仍可查看说明，不会因此获得权限。原生侧栏也继续保留。
+[集中控制台](DASHBOARD.md#中文说明)展示工作区、连接地址、读取/修改/终端权限、可搜索的 **41 个工具**、后台任务与最近请求元数据。未开放的工具仍可查看说明，不会因此获得权限。原生侧栏也继续保留。
 
 控制台支持中英文、键盘导航、窄窗口、浅色/深色/高对比度主题，不展示 Token、文件正文、命令或输出。需要时在本机选择 **管理访问权限**；**复制客户端配置**是独立操作，会把密钥写入剪贴板。
 
@@ -219,7 +219,7 @@ For a public issue, include extension/OS/VS Code/client versions, a reproduction
 
 终端需先本地启用，再逐条批准命令和工作目录。取消、拒绝或无人处理时不会执行。**获批命令以操作系统账户权限运行，不是沙箱**，可以访问工作区外文件和网络。
 
-短时检查使用 `run_terminal`，默认 15 秒、最多 30 秒。更长的有界检查使用 `start_terminal_task`：立即返回任务 ID，此时仍需本机确认；执行超时默认 **120 秒**、最多 **600 秒**，批准窗口 **30 秒**后失效。拿到 ID、`awaiting_approval`、`running` 或 `stopping` 都不代表完成，应继续用 `get_terminal_task` 查询最终状态。
+短时检查使用 `run_terminal`，默认 15 秒、最多 30 秒。更长的有界检查使用 `start_terminal_task`：立即返回任务 ID，此时仍需本机确认；执行超时默认 **120 秒**、最多 **3,600 秒**，批准窗口 **30 秒**后失效。拿到 ID、`awaiting_approval`、`running` 或 `stopping` 都不代表完成，应继续用 `get_terminal_task` 查询最终状态。
 
 等待批准、运行和停止中的任务合计最多 **3 个**；停止中的子进程关闭之前继续占用名额。`list_terminal_tasks` 返回当前会话活动任务与最多 **20 个**已结束任务的元数据。控制台可以取消桥接自身的活动任务，不能通过任意 PID 结束其他进程。
 

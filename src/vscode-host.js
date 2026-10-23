@@ -8,6 +8,9 @@ const fsSync = require('node:fs');
 const defaultSecurity = require('./security');
 const { createTaskManager, safeTaskEnvironment } = require('./task-manager');
 const { createWorkspaceOps } = require('./workspace-ops');
+const { CAPABILITIES } = require('./permission-lease');
+const { createRefactorOps } = require('./refactor-ops');
+const { createProjectTasks } = require('./project-tasks');
 
 const MAX_OUTPUT_BYTES = 64_000;
 const MAX_COMMAND_LENGTH = 8_192;
@@ -21,10 +24,12 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
   let epoch = crypto.randomBytes(16).toString('hex');
   let rootBindings;
   let taskManager;
+  let projectManager;
   const children = new Set();
   const pendingApprovals = new Set();
   const fileLocks = new Map();
   const previews = new Map();
+  const approvedProjectTasks = new Set();
   const providerTimeoutMs = Number.isInteger(languageTimeoutMs) && languageTimeoutMs > 0 ? Math.min(languageTimeoutMs, 30_000) : 10_000;
   const scheme = `workspace-bridge-preview-${crypto.randomBytes(6).toString('hex')}`;
   const provider = vscode.workspace.registerTextDocumentContentProvider(scheme, {
@@ -83,7 +88,10 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
   }
 
   function resetSession() {
+    approvedProjectTasks.clear();
     taskManager?.cancelAll({ clear: true });
+    projectManager?.cancelAll({ clear: true });
+    host.clearRefactorPlans?.();
     epoch = crypto.randomBytes(16).toString('hex');
     rootBindings = undefined;
     previews.clear();
@@ -95,7 +103,9 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
     if (tabs.length) Promise.resolve(vscode.window.tabGroups.close(tabs, true)).catch(() => {});
   }
   function cancelTerminal() {
+    approvedProjectTasks.clear();
     taskManager?.cancelAll({ clear: false });
+    projectManager?.cancelAll({ clear: false });
     for (const cancel of pendingApprovals) cancel();
     pendingApprovals.clear();
     for (const child of children) killChild(child);
@@ -449,28 +459,29 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
     return result;
   }
 
-  async function previewDiff({ path: inputPath, text, workspaceId, expectedHash, expectedVersion }) {
-    const workspace = snapshot(workspaceId, 'edit');
+  async function previewDiff({ path: inputPath, text, workspaceId, expectedHash, expectedVersion, capability = 'edit' }) {
+    if (!['edit', 'refactor'].includes(capability)) fail('ACCESS_DENIED', 'Invalid preview capability.');
+    const workspace = snapshot(workspaceId, capability);
     assertSafeContent(text);
     const creating = expectedHash === 'new';
-    const absolutePath = await checkedPath(workspace, inputPath, { create: creating, capability: 'edit' });
+    const absolutePath = await checkedPath(workspace, inputPath, { create: creating, capability });
     let original = vscode.Uri.file(absolutePath);
     if (creating) {
       await ensureAbsent(absolutePath);
       original = vscode.Uri.parse(`${scheme}:/empty-${crypto.randomBytes(8).toString('hex')}`);
       previews.set(original.toString(), '');
     } else {
-      const current = await readForWorkspace(workspace, absolutePath, 'edit');
+      const current = await readForWorkspace(workspace, absolutePath, capability);
       if (hashText(current.text) !== expectedHash || (expectedVersion !== undefined && current.version !== expectedVersion)) fail('EDIT_CONFLICT', 'The document changed. Read it again before previewing edits.');
     }
-    recheck(workspace, 'edit');
+    recheck(workspace, capability);
     const uri = vscode.Uri.parse(`${scheme}:/proposal-${crypto.randomBytes(8).toString('hex')}/${encodeURIComponent(path.basename(absolutePath))}`);
     previews.set(uri.toString(), text);
     while (previews.size > 20) previews.delete(previews.keys().next().value);
-    await checkedPath(workspace, absolutePath, { create: creating, capability: 'edit' });
+    await checkedPath(workspace, absolutePath, { create: creating, capability });
     await vscode.commands.executeCommand('vscode.diff', original, uri,
       localized(`Proposed changes: ${path.basename(absolutePath)}`, `建议修改：${path.basename(absolutePath)}`), { preview: true });
-    await checkedPath(workspace, absolutePath, { create: creating, capability: 'edit' });
+    await checkedPath(workspace, absolutePath, { create: creating, capability });
     return { opened: true };
   }
 
@@ -515,6 +526,53 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
       ]);
       recheck(workspace, 'terminal');
       return answer === approve;
+    } finally { clearTimeout(timer); pendingApprovals.delete(cancel); }
+  }
+
+  async function confirmAction({ workspaceId, capability, title, detail }) {
+    if (!['git', 'tasks', 'refactor'].includes(capability)) fail('ACCESS_DENIED', 'This action requires a specific local capability.');
+    const workspace = snapshot(workspaceId, capability);
+    if (typeof title !== 'string' || title.length > 250 || typeof detail !== 'string' || detail.length > 12000) fail('INVALID_ARGUMENT', 'Invalid local approval details.');
+    assertSafeContent(title); assertSafeContent(detail);
+    const approve = localized('Approve once', '仅批准这一次');
+    let timer, cancel;
+    try {
+      const answer = await Promise.race([
+        vscode.window.showWarningMessage(title, { modal: true, detail }, approve),
+        new Promise(resolve => { timer = setTimeout(() => resolve(undefined), approvalTimeoutMs); }),
+        new Promise(resolve => { cancel = () => resolve(undefined); pendingApprovals.add(cancel); }),
+      ]);
+      recheck(workspace, capability);
+      return answer === approve;
+    } finally { clearTimeout(timer); pendingApprovals.delete(cancel); }
+  }
+
+  async function confirmProjectTask({ workspaceId, cwd, command, approval }) {
+    const workspace = snapshot(workspaceId, 'tasks');
+    if (approval?.kind !== 'project_task') fail('INVALID_TASK', 'A manifest-bound project task is required.');
+    const absolute = await checkedPath(workspace, cwd, { directory: true, capability: 'tasks' });
+    const key = hashText(JSON.stringify([workspaceId, absolute, command, approval]));
+    if (approvedProjectTasks.has(key)) return true;
+    const once = localized('Run once', '仅运行这一次');
+    const session = localized('Allow this task for this session', '本会话允许相同任务');
+    const scripts = [{ name: approval.taskName, script: approval.script }, ...(approval.lifecycleScripts || [])];
+    const detail = localized('This executes project code with your account permissions, including filesystem and network access. Session approval also permits changed project source to run. Changing package.json requires a new approval. This is not a sandbox.',
+      '此操作以你的账户权限执行项目代码，可访问文件和网络。会话授权也允许执行修改后的项目源码；package.json 变化后需重新确认。此执行不在沙箱中。') +
+      `\n\n${absolute}\n${command}\n\n` + scripts.map(item => `${item.name}: ${item.script}`).join('\n');
+    assertSafeContent(detail);
+    let timer, cancel;
+    try {
+      const answer = await Promise.race([
+        vscode.window.showWarningMessage(localized(`Run project task: ${approval.taskName}?`, `运行项目任务：${approval.taskName}？`), { modal: true, detail }, once, session),
+        new Promise(resolve => { timer = setTimeout(() => resolve(undefined), approvalTimeoutMs); }),
+        new Promise(resolve => { cancel = () => resolve(undefined); pendingApprovals.add(cancel); }),
+      ]);
+      await checkedPath(workspace, absolute, { directory: true, capability: 'tasks' });
+      if (answer === session) {
+        if (approvedProjectTasks.size >= 100) approvedProjectTasks.delete(approvedProjectTasks.values().next().value);
+        approvedProjectTasks.add(key);
+      }
+      return answer === once || answer === session;
     } finally { clearTimeout(timer); pendingApprovals.delete(cancel); }
   }
 
@@ -566,27 +624,57 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = 
   }
 
   const host = {
-    getWorkspace, getAccess: () => { const current = getAccess(); return { read: current.read === true, edit: current.edit === true, terminal: current.terminal === true }; },
+    getWorkspace, getAccess: () => { const current = getAccess(); return Object.fromEntries(CAPABILITIES.map(key => [key, current[key] === true])); },
     readDocument, applyEdit, getDiagnostics, getSymbols, getEditorContext, getHover, searchWorkspaceSymbols,
     getDefinition: input => locations('vscode.executeDefinitionProvider', input),
     getReferences: input => locations('vscode.executeReferenceProvider', input),
     getTypeDefinition: input => locations('vscode.executeTypeDefinitionProvider', input),
     getImplementations: input => locations('vscode.executeImplementationProvider', input),
-    previewDiff, showDocument, confirmTerminal, executeTerminal,
+    previewDiff, showDocument, confirmTerminal, confirmAction, executeTerminal,
+    async getGitExecutable() {
+      const extension = vscode.extensions?.getExtension('vscode.git');
+      if (!extension) return undefined;
+      const api = await extension.activate();
+      const executable = api?.getAPI?.(1)?.git?.path;
+      return typeof executable === 'string' && path.isAbsolute(executable) ? executable : undefined;
+    },
     emitAudit: event => audit(event), resetSession, cancelTerminal,
-    dispose() { resetSession(); taskManager?.dispose(); provider.dispose(); },
+    dispose() { resetSession(); taskManager?.dispose(); projectManager?.dispose(); provider.dispose(); },
   };
   Object.assign(host, createWorkspaceOps({ vscode, snapshot, checkedPath, readForWorkspace, recheck, withFileLock,
     relativeInput, toRelative, hashText, assertSafeContent, pendingApprovals, fail }));
-  taskManager = createTaskManager({ getWorkspace, getAccess: host.getAccess,
-    checkCwd: (workspace, cwd) => checkedPath(workspace, cwd, { directory: true, capability: 'terminal' }),
+  Object.assign(host, createRefactorOps({ vscode, snapshot, checkedPath, readForWorkspace, recheck, withFileLock,
+    relativeInput, toRelative, hashText, assertSafeContent, pendingApprovals, fail, previewDiff,
+    languageTimeoutMs: providerTimeoutMs, approvalTimeoutMs }));
+  const managerOptions = { getWorkspace, getAccess: host.getAccess, environment: safeEnvironment, audit,
+    getActiveTaskCount: () => (taskManager?.activeCount() || 0) + (projectManager?.activeCount() || 0),
+    checkCwd: (workspace, cwd, capability) => checkedPath(workspace, cwd, { directory: true, capability }),
+    onChange: () => { try { onTaskChange(); } catch {} } };
+  taskManager = createTaskManager({ ...managerOptions,
     confirm: confirmTerminal, validateCommand, environment: safeEnvironment,
-    audit, onChange: () => { try { onTaskChange(); } catch {} }
   });
+  projectManager = createTaskManager({ ...managerOptions, capability: 'tasks', confirm: confirmProjectTask, validateCommand });
+  const projectTasks = createProjectTasks({ getWorkspace, getAccess: host.getAccess,
+    startTask: input => projectManager.start({ ...input, beforeLaunch: async () => {
+      const workspace = snapshot(input.workspaceId, 'tasks');
+      const live = await readForWorkspace(workspace, path.join(input.cwd, 'package.json'), 'tasks');
+      if (live.isDirty) fail('UNSAVED_CHANGES', 'Save package.json locally before running project tasks.');
+      await input.beforeLaunch();
+    } }), getTask: input => projectManager.get(input) });
+  host.listProjectTasks = input => projectTasks.list(input);
+  host.runProjectTask = async input => {
+    const workspace = snapshot(input.workspaceId, 'tasks');
+    const manifest = await resolvePath(workspace, 'package.json', { root: input.root ?? 0 });
+    const live = await readForWorkspace(workspace, manifest, 'tasks');
+    if (live.isDirty) fail('UNSAVED_CHANGES', 'Save package.json locally before running project tasks.');
+    return projectTasks.run(input);
+  };
+  host.getProjectTask = input => projectTasks.get(input);
   host.startTerminalTask = input => taskManager.start(input);
-  host.getTerminalTask = input => taskManager.get(input);
-  host.listTerminalTasks = input => taskManager.list(input);
-  host.cancelTerminalTask = input => taskManager.cancel(input);
+  const projectOwns = input => projectManager.list({ workspaceId: input.workspaceId }).some(task => task.id === input.id);
+  host.getTerminalTask = input => projectOwns(input) ? projectManager.get(input) : taskManager.get(input);
+  host.listTerminalTasks = input => [...taskManager.list(input), ...projectManager.list(input)].sort((a, b) => b.createdAt - a.createdAt);
+  host.cancelTerminalTask = input => projectOwns(input) ? projectManager.cancel(input) : taskManager.cancel(input);
   return host;
 }
 

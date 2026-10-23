@@ -190,6 +190,9 @@ async function run() {
         assert.equal(JSON.stringify(result).includes(root), false);
       } finally { collection.dispose(); }
     });
+    await require('./integration-v4-refactor').run({ vscode, root, check });
+    await require('./integration-v4-project').run({ vscode, root, check });
+    await require('./integration-v4-git').run({ vscode, root, check });
     await check('session reset invalidates old client mutations', async () => {
       host.resetSession();
       const result = await client.callTool({ name: 'write_file', arguments: { ...args, text: 'old session', expectedHash: current.hash } });

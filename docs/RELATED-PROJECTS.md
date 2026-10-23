@@ -44,13 +44,18 @@ Show server status, endpoint, current access, and next steps together. A starter
 
 The copy-and-connect interaction is informed by [Danchuna's panel source](https://github.com/Danchuna/vscode-mcp-api/blob/main/src/extension.ts). The new starter prompt explains the selected workflow. Tunnel creation is a separate capability and is not required to improve the local setup flow.
 
-## Further work
+## Implemented since this initial comparison
 
-- **Workspace symbol search:** useful for finding a function across a project; requires careful filtering of every provider location and bounded results across roots. See [juehang's implementation](https://github.com/juehang/vscode-mcp-server/blob/master/src/tools/symbol-tools.ts).
-- **Batch reads:** useful when several related files are already known; needs per-file errors and a shared response budget. See [nabheet's workspace tools](https://github.com/nabheet/vscode-mcp-server/blob/main/src/mcp/tools/workspace.ts).
-- **Multi-window discovery:** requires explicit window identity and tests for reload, disconnect, and routing changes. It must not silently route a request to a different project.
+v0.3 implemented workspace symbol search and bounded batch reads; these are no longer future topics. v0.4 adds independent Git, semantic refactoring and npm-task workflows. See [v0.4 workflows](V4-WORKFLOWS.md) for exact capabilities and limits.
 
-These are future design topics, not claims of features included in this release.
+Further primary-source references reviewed on 2026-10-23:
+
+- [Serena](https://github.com/oraios/serena): symbol-level retrieval and editing informed the priority of language-service refactoring. Its application and component licenses differ; no source is imported here.
+- [Microsoft DebugMCP](https://github.com/microsoft/DebugMCP): debugger control is a further design reference. A debugger is not included in v0.4.
+- [VSCode as MCP Server](https://github.com/acomagu/vscode-as-mcp-server): native diff review and editor/terminal workflows.
+- [Cline](https://github.com/cline/cline): categorized approvals and checkpoints are useful interaction references. Cline is a complete agent, while Workspace Bridge is a server for external clients.
+
+Multi-window routing, a full debugger, interactive PTYs and OS-level execution isolation remain further work. The comparisons are based on public documentation and selected source, not a common usability benchmark or security endorsement.
 
 ## Boundaries retained
 

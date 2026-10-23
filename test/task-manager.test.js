@@ -253,17 +253,64 @@ test('credential output split across chunks is withheld only on explicit output 
   assert.throws(() => f.manager.get({ workspaceId: f.context.workspace.id, id: job.id, includeOutput: 'true' }), { code: 'INVALID_OUTPUT_OPTION' });
 });
 
-test('combined stdout and stderr have a 64000 byte total cap and stop runaway output', async t => {
+test('combined stdout and stderr retain a bounded rolling window while high-output commands complete', async t => {
   const f = await fixture(t, { confirm: async () => true });
-  const command = await f.script("process.stdout.write('a'.repeat(40000)); process.stderr.write('b'.repeat(40000)); setInterval(() => {}, 1000);");
+  const command = await f.script("process.stdout.write('a'.repeat(40000)); process.stderr.write('b'.repeat(40000));");
   const job = await f.manager.start(f.input(command));
-  await until(() => f.state(job).state === 'failed');
+  await until(() => f.state(job).state === 'completed');
   const result = f.output(job);
-  assert.equal(result.failureCode, 'OUTPUT_LIMIT');
+  assert.equal(Object.hasOwn(result, 'failureCode'), false);
   assert.equal(result.outputBytes, MAX_OUTPUT_BYTES);
   assert.equal(Buffer.byteLength(result.output), MAX_OUTPUT_BYTES);
   assert.equal(result.outputTruncated, true);
+  assert.equal(result.totalOutputBytes, 80000);
+  assert.equal(result.outputStartByte, 16000);
+  assert.match(result.outputNotice, /earlier output was discarded/);
   await until(() => f.context.children[0].exitCode !== null || f.context.children[0].signalCode !== null);
+});
+
+test('credentials detected before rolling eviction stay withheld after safe output replaces them', async t => {
+  const f = await fixture(t, { confirm: async () => true });
+  const command = await f.script("process.stdout.write('sk-'); setTimeout(() => { process.stdout.write('A'.repeat(40)); process.stdout.write('\\n' + 'x'.repeat(160000)); }, 30);");
+  const job = await f.manager.start(f.input(command));
+  await until(() => f.state(job).state === 'completed');
+  const result = f.output(job);
+  assert.equal(result.outputWithheld, true);
+  assert.equal(Object.hasOwn(result, 'output'), false);
+  assert.equal(result.outputTruncated, true);
+  assert.equal(result.outputBytes, 0);
+  assert.equal(result.totalOutputBytes, 160044);
+});
+
+test('rolling UTF-8 output excludes a cut leading codepoint and still decodes safely', async t => {
+  const f = await fixture(t, { confirm: async () => true });
+  const command = await f.script("process.stdout.write('界'.repeat(30000));");
+  const job = await f.manager.start(f.input(command));
+  await until(() => f.state(job).state === 'completed');
+  const result = f.output(job);
+  assert.equal(result.outputWithheld, false);
+  assert.match(result.output, /^界+$/);
+  assert.equal(result.totalOutputBytes, 90000);
+  assert.equal(result.outputStartByte, 26001);
+  assert.equal(Buffer.byteLength(result.output), 63999);
+});
+
+test('credential assignments split before a long value are withheld before the opening prefix is evicted', async t => {
+  const f = await fixture(t, { confirm: async () => true });
+  const command = await f.script(`process.stdout.write('api_key="'); setTimeout(() => { process.stdout.write('A'.repeat(70000)); process.stdout.write('"'); }, 30);`);
+  const job = await f.manager.start(f.input(command));
+  await until(() => f.state(job).state === 'completed');
+  assert.equal(f.output(job).outputWithheld, true);
+  assert.equal(Object.hasOwn(f.output(job), 'output'), false);
+});
+
+test('binary output invalid across chunks stays withheld even after the rolling window changes', async t => {
+  const f = await fixture(t, { confirm: async () => true });
+  const command = await f.script("process.stdout.write(Buffer.from([0xc3])); setTimeout(() => process.stdout.write(Buffer.from([0x28, ...Buffer.from('x'.repeat(90000))])), 30);");
+  const job = await f.manager.start(f.input(command));
+  await until(() => f.state(job).state === 'completed');
+  assert.equal(f.output(job).outputWithheld, true);
+  assert.equal(f.output(job).outputBytes, 0);
 });
 
 test('pending approvals count toward concurrency, concurrent starts cannot exceed three, and terminal history is bounded', async t => {
@@ -310,12 +357,21 @@ test('only Windows child PATH drops exact duplicate entries and preserves first 
 
 test('invalid inputs never reach local approval or process spawning', async t => {
   const f = await fixture(t);
-  for (const changes of [{ timeoutMs: 600_001 }, { timeoutMs: 0 }, { name: '\ninvalid' }, { command: '' }, { command: 'echo \0' }, { cwd: 'relative' }]) {
+  for (const changes of [{ timeoutMs: 3_600_001 }, { timeoutMs: 0 }, { name: '\ninvalid' }, { command: '' }, { command: 'echo \0' }, { cwd: 'relative' }]) {
     await assert.rejects(f.manager.start({ ...f.input('echo example'), ...changes }));
   }
   assert.equal(f.context.children.length, 0);
   assert.equal(f.context.approvals.length, 0);
   assert.equal(f.manager.list({ workspaceId: f.context.workspace.id }).length, 0);
+});
+
+test('one-hour tasks are accepted and validation after approval prevents a changed project task from launching', async t => {
+  const f = await fixture(t, { confirm: async () => true });
+  const job = await f.manager.start({ ...f.input('echo example'), timeoutMs: 3_600_000,
+    beforeLaunch: async () => { throw new BridgeError('MANIFEST_CHANGED', 'Changed while awaiting local approval.'); } });
+  await until(() => f.state(job).state === 'rejected');
+  assert.equal(f.state(job).failureCode, 'APPROVAL_FAILED');
+  assert.equal(f.context.children.length, 0);
 });
 
 test('cancellation remains terminal even when the owned child closes later', async t => {
@@ -437,4 +493,24 @@ test('get/list/cancel and explicit output reads all require current workspace re
   await until(() => f.state(job).state === 'cancelled');
   assert.equal(f.output(job).output, '');
   assert.equal(f.manager.list({ workspaceId: f.context.workspace.id }).length, 1);
+});
+
+test('project-task managers check their own permission and share a global three-task limit', async t => {
+  let first;
+  let second;
+  const count = () => (first?.manager.activeCount() || 0) + (second?.manager.activeCount() || 0);
+  first = await fixture(t, { capability: 'tasks', getActiveTaskCount: count, confirm: () => new Promise(() => {}) });
+  second = await fixture(t, { getActiveTaskCount: count, confirm: () => new Promise(() => {}) });
+  first.context.access.tasks = true;
+  first.context.access.terminal = false;
+  await first.manager.start(first.input('echo project'));
+  await second.manager.start(second.input('echo terminal'));
+  await first.manager.start(first.input('echo project again'));
+  assert.equal(count(), 3);
+  await assert.rejects(second.manager.start(second.input('echo excess')), { code: 'TASK_LIMIT' });
+  first.context.access.tasks = false;
+  await until(() => first.manager.activeCount() === 0);
+  assert.equal(second.manager.activeCount(), 1);
+  await second.manager.start(second.input('echo room again'));
+  assert.equal(count(), 2);
 });

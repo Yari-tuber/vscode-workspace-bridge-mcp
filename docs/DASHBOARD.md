@@ -1,6 +1,6 @@
 # Workspace Bridge control center
 
-The v0.3 control center keeps connection state, session permissions, the **27-tool directory**, background tasks, and recent activity in one VS Code editor panel. Its text follows the VS Code display language (English or Chinese), and its colors follow the active light, dark, or high contrast theme.
+The control center keeps connection state, session permissions, the **41-tool directory**, background tasks, and recent activity in one VS Code editor panel. Its text follows the VS Code display language (English or Chinese), and its colors follow the active light, dark, or high contrast theme.
 
 Open **Workspace Bridge: Open Control Center** (`workspaceBridge.openDashboard`) from the Command Palette, use **Open control center** in the bridge sidebar, or click the bridge status-bar item. The compact native sidebar remains available alongside the full control center.
 
@@ -39,7 +39,7 @@ Choose **Cancel task** for a task awaiting local approval or currently running. 
 
 An awaiting approval, running, or **Stopping** row is still active. A stopping task cannot be cancelled again and continues to count toward the three-active-task limit until its owned child closes. Completion, failure, cancellation, timeout, and rejected approval are final states. Cancellation or failure never undoes file/network effects already produced by a command.
 
-Background commands default to a 120-second execution timeout, with a 600-second maximum; local approval expires after 30 seconds. The session retains active tasks plus up to 20 finished tasks. Stopping/resetting the bridge session clears that task history/output and requests termination of owned children. Model-facing output retrieval is separately opt-in with `includeOutput: true`, capped at 64,000 combined stdout/stderr bytes and filtered before returning; it is never displayed here.
+Background commands default to a 120-second execution timeout, with a 3,600-second maximum; local approval expires after 30 seconds. The session retains active tasks plus up to 20 finished tasks per kind (terminal or project). Stopping/resetting the bridge session clears that task history/output and requests termination of owned children. Model-facing output retrieval is separately opt-in with `includeOutput: true`, capped at 64,000 combined stdout/stderr bytes and filtered before returning; it is never displayed here.
 
 Recent requests list the request time, tool name, status, and duration. No file contents, prompts, command bodies, request bodies, or terminal output are sent to this panel.
 
@@ -72,9 +72,9 @@ Unit tests in `test/dashboard.test.js` cover message validation, safe state proj
 
 在命令面板运行 **工作区桥接：打开控制台**（`workspaceBridge.openDashboard`），或从桥接侧栏、状态栏进入。先启动只读会话，再把 **复制客户端配置** 得到的配置粘贴到可信 MCP 客户端。配置中含密钥，请勿公开。需要模型修改文件时，通过 **管理访问权限** 开启当前会话的修改权限；终端功能仍需逐条在本机确认命令。
 
-工具目录包含 **27 个工具**，可搜索名称、说明和分类，也可按读取、修改和终端筛选。新增能力包括批量读取、工作区符号与类型/实现导航、在本机打开文件、安全建目录、移动和回收文本文件、异步命令任务。未开放的工具保留显示，并明确标注状态；可查看不等于已授权。
+工具目录包含 **41 个工具**，可搜索名称、说明和分类，也可按读取、修改、重构、项目任务、Git 写入和终端筛选。新增能力包括批量读取、工作区符号与类型/实现导航、在本机打开文件、安全建目录、移动和回收文本文件、异步命令任务。未开放的工具保留显示，并明确标注状态；可查看不等于已授权。
 
-后台任务只展示桥接自身创建的任务，等待确认或运行中可取消。即使权限对话框仍在等待处理，停止桥接和取消任务也继续可用。**停止中**仍属活动状态，不能重复取消，在子进程关闭前继续占用三个活动名额之一。任务执行默认 120 秒、最长 600 秒，本机批准 30 秒后失效；历史保留活动任务与最多 20 个已结束任务。会话重置会清空历史和输出并请求结束所属进程，取消或失败不会撤销已经产生的副作用。
+后台任务只展示桥接自身创建的任务，等待确认或运行中可取消。即使权限对话框仍在等待处理，停止桥接和取消任务也继续可用。**停止中**仍属活动状态，不能重复取消，在子进程关闭前继续占用三个活动名额之一。任务执行默认 120 秒、最长 3,600 秒，本机批准 30 秒后失效；历史保留活动任务与每类最多 20 个已结束任务（终端与项目任务分别保留）。会话重置会清空历史和输出并请求结束所属进程，取消或失败不会撤销已经产生的副作用。
 
 控制台与最近请求均不展示命令、输出、文件正文、密钥或工作区绝对路径。模型若需要任务输出，须对具体任务明确请求 `includeOutput: true`；stdout/stderr 合并总计最多 64,000 字节，返回前经过过滤，控制台仍不显示该正文。
 

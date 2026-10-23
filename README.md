@@ -22,13 +22,26 @@ Workspace Bridge is an **MCP server inside VS Code**. External MCP clients conne
 
 > **Connection requirement:** Streamable HTTP with a custom `Authorization: Bearer …` header. Bearer authentication is not OAuth; hosted connectors that require OAuth may be incompatible. The bridge does not create a public tunnel.
 
-![Workspace Bridge v0.3 control center running in VS Code](media/screenshots/control-center-v3.jpg)
+![Workspace Bridge v0.4 control center running in VS Code](media/screenshots/control-center-v4.png)
 
-*Real v0.3.0 screenshot in an isolated development profile, with a synthetic demo workspace. No user project, credential or unrelated window is included.*
+*Real v0.4.0 screenshot in an isolated development profile, with a synthetic demo workspace. No user project, credential or unrelated window is included.*
+
+## v0.4: edit, review and verify
+
+**41 tools** now include structured Git, semantic rename, formatting and edit-only quick fixes, plus manifest-bound npm tasks and conservative TAP summaries.
+
+- Preview a bounded multi-file refactor, approve it locally, and apply one text-only WorkspaceEdit. Changes remain unsaved for review. Language features depend on installed providers.
+- Inspect Git status, diffs and history; locally approve explicit staging/unstaging and commits bound to a completely reviewed staged patch. No hooks, signing or automatic push. Staging uses raw bytes without clean filters or line-ending conversion.
+- Discover root package.json scripts. Approve one run or the same task for this bridge session; changes to the manifest require approval again. Session approval can run changed project code with your account privileges; it is not a sandbox.
+- Grant edits, refactors, project tasks, Git writes and arbitrary terminal access separately, for 30 minutes, two hours or this session. Privileged grants expire while read access remains available.
+- Run background jobs for up to 60 minutes, sharing three active slots across terminal and project tasks. Retain a bounded rolling log with truncation offsets instead of stopping high-output jobs. Suspected secrets cause output to remain withheld.
+
+Git currently requires a self-contained repository root and repository-local identity for commits; linked worktrees, submodules and special configurations are conservatively restricted. Identity is not returned to the model. Unsupported test output stays unknown. See [v0.4 workflows and limits](docs/V4-WORKFLOWS.md).
+
 
 ## One control center, from connection to completion
 
-Open **Workspace Bridge: Open Control Center** from the Command Palette, the bridge sidebar, or the status bar. See the active workspace and permissions, search the **27-tool directory**, follow background tasks, cancel bridge-owned work, and inspect recent request metadata in one editor panel.
+Open **Workspace Bridge: Open Control Center** from the Command Palette, the bridge sidebar, or the status bar. See the active workspace and permissions, search the **41-tool directory**, follow background tasks, cancel bridge-owned work, and inspect recent request metadata in one editor panel.
 
 The control center supports English and Chinese, keyboard navigation, narrow editor groups, and the active VS Code theme. It never displays tokens, command text, or terminal output. **Copy client configuration** intentionally copies a token into your clipboard; use it only in a trusted client.
 
@@ -64,7 +77,7 @@ The bridge starts with read access; editing and terminal execution stay off unti
 | **Run and follow a check** | Short foreground commands or named background tasks with status polling, optional bounded output, and cancellation. Enable access locally and approve every command. |
 | **Stay in control** | A theme-aware control center with searchable tools, permission states, owned tasks, request metadata, connection copying, token rotation, and local diagnostics export. |
 
-The server exposes **27 tools** and the `review_workspace` prompt. v0.3 adds batch reading, wider code navigation, text-file lifecycle tools, and asynchronous command tasks. The [tool reference](docs/TOOLS.md) documents exact arguments and limits. Active selection text and background-task output are returned only when explicitly requested.
+The server exposes **41 tools** and the `review_workspace` prompt. v0.3 adds batch reading, wider code navigation, text-file lifecycle tools, and asynchronous command tasks. The [tool reference](docs/TOOLS.md) documents exact arguments and limits. Active selection text and background-task output are returned only when explicitly requested.
 
 <p align="center">
   <img src="media/readme-workflow.png" alt="An MCP client connects over authenticated Streamable HTTP to Workspace Bridge in VS Code, which accesses the trusted workspace through editor APIs. Read access comes first, editing is opt-in, and each terminal command needs local approval." width="1280" />

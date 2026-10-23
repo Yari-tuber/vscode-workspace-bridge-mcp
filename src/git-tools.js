@@ -1,0 +1,15 @@
+'use strict';
+const { z } = require('zod');
+const { operations } = require('./git-ops');
+const scope = { workspaceId: z.string().min(1).max(128), root: z.number().int().min(0).max(63).default(0) };
+const paths = z.array(z.string().min(1).max(1000)).min(1).max(50);
+const fingerprint = z.string().regex(/^[a-f0-9]{64}$/);
+const definitions = [
+  { name: 'git_status', capability: 'read', description: 'Inspect the selected complete, self-contained Git repository. Returns safe relative changed paths and stateHash for staging. Hidden/credential paths are counted but never named. Linked worktrees with external metadata, conflicts, large changes and special entries have restricted operations. Git must be installed.', schema: z.object(scope).strict(), run: operations.status },
+  { name: 'git_diff', capability: 'read', description: 'Review a bounded plain-text Git diff without external diff or textconv commands. staged=true returns reviewHash only when ALL staged files can be safely reviewed, the patch is complete, and there are no conflicts. Read that complete patch before git_commit. Untracked files must be read separately before staging.', schema: z.object({ ...scope, staged: z.boolean().default(false), paths: paths.optional() }).strict(), run: operations.diff },
+  { name: 'git_log', capability: 'read', description: 'Read recent commit hashes, dates and bounded safe subjects. Author identity, email addresses, remotes and raw Git errors are excluded.', schema: z.object({ ...scope, limit: z.number().int().min(1).max(30).default(10) }).strict(), run: operations.log },
+  { name: 'git_stage', capability: 'git', description: 'Stage 1–50 explicit reviewed changed UTF-8 files or deletions after local confirmation. Requires current git_status stateHash and locally enabled Git capability. Uses raw file bytes, bypassing clean filters and line-ending conversion. No directories, ignored/secret files, symlinks, conflicts or submodules.', schema: z.object({ ...scope, paths, expectedStateHash: fingerprint }).strict(), run: operations.stage },
+  { name: 'git_unstage', capability: 'git', description: 'Restore only the selected index entries to HEAD after local confirmation, preserving working files. Requires current git_status stateHash. Supports unborn repositories; never invokes reset, clean, hooks or shell commands.', schema: z.object({ ...scope, paths, expectedStateHash: fingerprint }).strict(), run: operations.unstage },
+  { name: 'git_commit', capability: 'git', description: 'Create one local unsigned commit from ALL fully reviewed safe staged files after local file-list and message confirmation. Requires the complete git_diff(staged=true) reviewHash and repository-local Git user.name/user.email. Changes during approval reject the operation. Hooks are disabled. No push, reset or clean.', schema: z.object({ ...scope, expectedReviewHash: fingerprint, message: z.string().trim().min(1).max(2000).refine(value => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value), 'Commit messages cannot contain control characters.') }).strict(), run: operations.commit }
+];
+module.exports = { definitions };

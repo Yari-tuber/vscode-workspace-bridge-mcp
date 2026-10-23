@@ -4,7 +4,7 @@ Use this checklist for the exact commit and VSIX being published. Check a box on
 
 ## Release identity
 
-- Version: `0.3.0`
+- Version: `0.4.0`
 - Repository: [Yari-tuber/vscode-workspace-bridge-mcp](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp).
 - Commit: record in the GitHub release.
 - Package SHA-256: publish beside the VSIX.

@@ -91,7 +91,7 @@ test('dashboard bounds metadata and accepts only valid values and known task sta
   assert.equal(safe.version, ''); assert.equal(safe.workspace.rootCount, 0); assert.equal(safe.access.read, false);
   assert.equal(safe.tools.length, 200); assert.equal(safe.recentRequests.length, 50); assert.equal(safe.tasks.length, 2);
   assert.deepEqual(safe.tasks[1], { id: 'task-3', name: 'Terminal task', status: 'rejected', durationMs: 0, createdAt: '', exitCode: 2, truncated: true });
-  assert.deepEqual(sanitizeDashboardState(null), { version: '', running: false, url: '', workspace: { name: '', rootCount: 0, trusted: false }, access: { read: false, edit: false, terminal: false }, tools: [], tasks: [], recentRequests: [] });
+  assert.deepEqual(sanitizeDashboardState(null), { version: '', running: false, url: '', workspace: { name: '', rootCount: 0, trusted: false }, access: { read: false, edit: false, refactor: false, tasks: false, git: false, terminal: false }, tools: [], tasks: [], recentRequests: [] });
 });
 
 test('message validation permits only documented local actions and exact cancellation payloads', () => {

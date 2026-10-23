@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Added six structured Git tools, five preview-based language refactoring tools, and three npm project-task tools; 41 tools in total.
+- Separated local edit, refactor, project-task, Git-write and terminal grants, with optional 30-minute or two-hour expiry.
+- Added explicit per-session approval for the same manifest-bound project task; manifest changes require approval again.
+- Increased background task maximum to one hour and retained a 64,000-byte rolling log rather than stopping at the output limit; secret detection remains sticky after eviction.
+- Added conservative TAP summaries that distinguish unknown output from passed tests, with raw output still opt-in.
+- Refactor application is text-only and leaves editor buffers unsaved; Git commits require complete staged review and local confirmation, bypassing hooks and signing.
+
 ## 0.3.0
 
 - Expanded from 15 to 27 tools: batch file reads, workspace symbols, type/implementation navigation, local file review, safe directory creation, saved text-file moves, confirmed Trash operations, and asynchronous command tasks.

@@ -2,7 +2,9 @@
 
 `write_file` returns the digest of the actual saved editor text. VS Code may normalize a new file's line endings to its platform preference; the returned `hash` and `eol` describe that result. Read again before preparing the next edit.
 
-The server exposes **27 tools** and the `review_workspace` prompt. Call `workspace_overview` first. Use the resulting `workspaceId` on every other call, even if you already know a file's name. The [control center](DASHBOARD.md) provides a searchable tool directory and shows which capabilities are currently unlocked.
+See [v0.4 workflows](V4-WORKFLOWS.md) for the 14 new Git, refactor and project-task tools, scoped grants and their exact boundaries. The live MCP schemas are authoritative.
+
+The server exposes **41 tools** and the `review_workspace` prompt. Call `workspace_overview` first. Use the resulting `workspaceId` on every other call, even if you already know a file's name. The [control center](DASHBOARD.md) provides a searchable tool directory and shows which capabilities are currently unlocked.
 
 Tool results use MCP text content containing JSON. A denied or failed tool result has `isError: true` and an `error` object with a code and a user-readable message. Do not interpret a denied operation as permission to retry through the terminal.
 
@@ -46,7 +48,7 @@ Not every tool takes all shared fields. Editor context, workspace-symbol search,
 | `create_directory` | Required `path` | Creates safe directories one level at a time, at most 16 path components per call. Requires edit access; never follows links or replaces existing files. |
 | `move_file` | Required `path`, `targetPath`, `expectedHash`; optional `targetRoot` | Moves one saved regular UTF-8 text file through VS Code's rename API. `targetRoot` defaults to the source `root`. The target parent must exist; no overwrite or case-only rename. Requires edit access and a current source hash. |
 | `delete_file` | Required `path`, `expectedHash` | Sends one saved regular UTF-8 text file to system Trash after a separate local modal confirmation. Requires edit access; no directory, recursive deletion, or permanent-delete fallback. |
-| `start_terminal_task` | Required `command`; `cwd: ""`, `name: "Terminal task"`, `timeoutMs: 120000` | Starts the approval workflow and immediately returns a task ID in `awaiting_approval`. Command is at most 2,000 characters; name is 1–80 characters; timeout is 1,000–600,000 ms. Requires terminal access and individual local approval. |
+| `start_terminal_task` | Required `command`; `cwd: ""`, `name: "Terminal task"`, `timeoutMs: 120000` | Starts the approval workflow and immediately returns a task ID in `awaiting_approval`. Command is at most 2,000 characters; name is 1–80 characters; timeout is 1,000–3,600,000 ms. Requires terminal access and individual local approval. |
 | `get_terminal_task` | `workspaceId`, required `id`; `includeOutput: false` | Returns one owned task's metadata. Set `includeOutput: true` to explicitly request credential-filtered combined output. The ID is 32 lowercase hexadecimal characters. No `root` or `path`. |
 | `list_terminal_tasks` | `workspaceId` only | Returns metadata for current-session tasks: active tasks plus up to 20 finished tasks. Never returns command text, paths, PID, or output. |
 | `cancel_terminal_task` | `workspaceId`, required `id` | Requests cancellation of an owned task. A running child enters `stopping` until it closes. No arbitrary PID/process API; no rollback of effects already produced. Requires current workspace read access. |
@@ -184,7 +186,7 @@ The subprocess receives a limited environment rather than all extension-host env
 
 ### Background command tasks
 
-`start_terminal_task` has a **120,000 ms default** and **600,000 ms maximum** execution timeout, counted after the process starts. The local approval expires after **30 seconds**. `cwd` is workspace-relative within the selected root; `name` is a short display label, so keep commands, private paths, and secrets out of it.
+`start_terminal_task` has a **120,000 ms default** and **3,600,000 ms maximum** execution timeout, counted after the process starts. The local approval expires after **30 seconds**. `cwd` is workspace-relative within the selected root; `name` is a short display label, so keep commands, private paths, and secrets out of it.
 
 Starting returns metadata immediately, initially `awaiting_approval`. Retain its `id` and poll `get_terminal_task` at a reasonable interval. A successful MCP response means the task was created, not that its command was approved, started, or completed.
 
@@ -203,7 +205,7 @@ At most **three active tasks** are allowed, including `awaiting_approval`, `runn
 
 Metadata contains safe IDs, names, states, timestamps, timeout, output byte/truncation counts, and available exit/signal/failure fields. It excludes command text, working directory, environment, PID, and output. `list_terminal_tasks` and `get_terminal_task` without `includeOutput` require only the current read capability; terminal access is required to start a task. A client may still request cancellation of its owned task while terminal access has been disabled, as long as current workspace read access remains.
 
-Output is captured as a **combined stdout/stderr stream with a 64,000-byte total cap**. Exceeding the cap terminates the child and records `OUTPUT_LIMIT`. Set `includeOutput: true` on a specific `get_terminal_task` request to retrieve that bounded stream. Invalid UTF-8/binary data or recognizable credentials cause `outputWithheld: true`; metadata remains available. The control center and exported bridge diagnostics never show task output.
+Background output is captured as a combined stdout/stderr stream in a **64,000-byte rolling window**. High output does not terminate the child. `totalOutputBytes` and `outputStartByte` identify omitted earlier bytes. Suspected secrets remain withheld even after rolling eviction. Set `includeOutput: true` on a specific `get_terminal_task` request to retrieve that bounded stream. Invalid UTF-8/binary data or recognizable credentials cause `outputWithheld: true`; metadata remains available. The control center and exported bridge diagnostics never show task output.
 
 Example asynchronous workflow:
 

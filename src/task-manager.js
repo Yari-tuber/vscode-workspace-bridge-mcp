@@ -8,7 +8,8 @@ const defaultSecurity = require('./security');
 const MAX_OUTPUT_BYTES = 64_000;
 const MAX_ACTIVE_TASKS = 3;
 const MAX_HISTORY = 20;
-const MAX_TIMEOUT_MS = 600_000;
+const MAX_TIMEOUT_MS = 3_600_000;
+const SCAN_WINDOW = 8_192;
 const ACTIVE_STATES = new Set(['awaiting_approval', 'running', 'stopping']);
 const ENV_ALLOWLIST = new Set([
   'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR',
@@ -57,12 +58,14 @@ function createTaskManager({
   getWorkspace, getAccess, checkCwd, confirm, validateCommand = () => {},
   environment = () => process.env, audit = () => {}, onChange = () => {},
   spawn = childProcess.spawn, kill = killTaskTree, security = defaultSecurity,
-  approvalTimeoutMs = 30_000, checkIntervalMs = 250,
+  approvalTimeoutMs = 30_000, checkIntervalMs = 250, capability = 'terminal', getActiveTaskCount,
 }) {
   if ([getWorkspace, getAccess, checkCwd, confirm, validateCommand, spawn, kill].some(fn => typeof fn !== 'function')) {
     throw new TypeError('Task manager requires workspace, access, directory and approval callbacks.');
   }
   const { BridgeError, assertWorkspace, assertSafeContent } = security;
+  if (!['terminal', 'tasks'].includes(capability)) throw new TypeError('Choose terminal or tasks access.');
+  if (getActiveTaskCount !== undefined && typeof getActiveTaskCount !== 'function') throw new TypeError('Active-task counting requires a callback.');
   const tasks = new Map();
   // Session/history clearing must not release an OS process slot before close.
   const liveChildren = new Map();
@@ -82,6 +85,7 @@ function createTaskManager({
       id: task.id, name: task.name, state: task.state,
       createdAt: task.createdAt, updatedAt: task.updatedAt, timeoutMs: task.timeoutMs,
       outputBytes: task.outputBytes, outputTruncated: task.outputTruncated,
+      totalOutputBytes: task.totalOutputBytes, outputStartByte: task.totalOutputBytes - task.outputBytes,
       ...(task.startedAt !== undefined ? { startedAt: task.startedAt } : {}),
       ...(task.finishedAt !== undefined ? { finishedAt: task.finishedAt } : {}),
       ...(task.exitCode !== undefined ? { exitCode: task.exitCode } : {}),
@@ -103,6 +107,9 @@ function createTaskManager({
       old.output.length = 0;
       old.command = '';
       old.cwd = '';
+      old.approval = undefined;
+      old.beforeLaunch = undefined;
+      old.scanTail = '';
     }
   }
   function clearTimers(task) {
@@ -138,16 +145,16 @@ function createTaskManager({
     return !disposed && tasks.get(task.id) === task && task.state === 'awaiting_approval';
   }
   function checkTaskAccess(task) {
-    return snapshot(task.workspaceId, 'terminal');
+    return snapshot(task.workspaceId, capability);
   }
   async function validatedCwd(workspace, cwd) {
     let canonical;
-    try { canonical = await checkCwd(workspace, cwd); }
+    try { canonical = await checkCwd(workspace, cwd, capability); }
     catch (error) {
       if (error instanceof BridgeError) throw error;
       fail('PATH_UNAVAILABLE', 'The workspace directory cannot be accessed.');
     }
-    snapshot(workspace.id, 'terminal');
+    snapshot(workspace.id, capability);
     if (typeof canonical !== 'string' || !path.isAbsolute(canonical)) fail('INVALID_PATH', 'An absolute workspace directory is required.');
     return canonical;
   }
@@ -162,6 +169,10 @@ function createTaskManager({
     // Stopping processes retain their slots until the owned child reports close.
     const pending = [...tasks.values()].filter(task => ACTIVE_STATES.has(task.state) && !task.child).length;
     return pending + liveChildren.size;
+  }
+  function assertSlotAvailable() {
+    const count = getActiveTaskCount ? getActiveTaskCount() : activeCount();
+    if (!Number.isSafeInteger(count) || count < 0 || count >= MAX_ACTIVE_TASKS) fail('TASK_LIMIT', 'At most three command tasks may run or await local approval.');
   }
   function find(workspaceId, id) {
     snapshot(workspaceId);
@@ -194,18 +205,45 @@ function createTaskManager({
     task.updatedAt = task.startedAt;
     task.executionTimer = setTimeout(() => terminate(task, 'timed_out', 'TIMEOUT'), task.timeoutMs);
     task.executionTimer.unref?.();
+    const withholdOutput = () => {
+      task.outputWithheld = true;
+      task.output.length = 0;
+      task.outputBytes = 0;
+      task.scanTail = '';
+    };
     const collect = chunk => {
       if (task.state !== 'running') return;
       const buffer = Buffer.from(chunk);
-      const remaining = MAX_OUTPUT_BYTES - task.outputBytes;
-      if (remaining > 0) {
-        const part = buffer.subarray(0, remaining);
-        task.output.push(part);
-        task.outputBytes += part.length;
+      task.totalOutputBytes = Math.min(Number.MAX_SAFE_INTEGER, task.totalOutputBytes + buffer.length);
+      task.outputTruncated ||= task.totalOutputBytes > MAX_OUTPUT_BYTES;
+      if (task.outputWithheld) return;
+      // Scan before eviction: a credential cannot become visible when its prefix
+      // falls outside the rolling log. Keep only a small decoder/scanner window.
+      try {
+        for (let offset = 0; offset < buffer.length; offset += 4_096) {
+          const text = task.decoder.decode(buffer.subarray(offset, offset + 4_096), { stream: true });
+          const scan = task.scanTail + text;
+          // A synthetic closing delimiter also detects a long credential before
+          // its final boundary/quote arrives in a later chunk.
+          assertSafeContent(scan + '" ');
+          if (/\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password)\b["']?\s*[:=]\s{4,}$/i.test(scan)) {
+            throw new Error('Ambiguous credential assignment.');
+          }
+          task.scanTail = scan.slice(-SCAN_WINDOW);
+        }
+      } catch { withholdOutput(); return; }
+      if (buffer.length >= MAX_OUTPUT_BYTES) {
+        task.output = [Buffer.from(buffer.subarray(buffer.length - MAX_OUTPUT_BYTES))];
+        task.outputBytes = MAX_OUTPUT_BYTES;
+        return;
       }
-      if (buffer.length > remaining) {
-        task.outputTruncated = true;
-        terminate(task, 'failed', 'OUTPUT_LIMIT');
+      task.output.push(buffer);
+      task.outputBytes += buffer.length;
+      while (task.outputBytes > MAX_OUTPUT_BYTES) {
+        const excess = task.outputBytes - MAX_OUTPUT_BYTES;
+        const first = task.output[0];
+        if (first.length <= excess) { task.output.shift(); task.outputBytes -= first.length; }
+        else { task.output[0] = Buffer.from(first.subarray(excess)); task.outputBytes -= excess; }
       }
     };
     child.stdout?.on('data', collect);
@@ -214,6 +252,10 @@ function createTaskManager({
       if (task.state === 'running') finish(task, 'failed', 'COMMAND_FAILED');
     });
     child.once('close', (exitCode, signal) => {
+      if (!task.outputWithheld) {
+        try { assertSafeContent(task.scanTail + task.decoder.decode()); }
+        catch { withholdOutput(); }
+      }
       liveChildren.delete(child);
       task.child = undefined;
       if (task.state === 'running' || task.state === 'stopping') {
@@ -234,7 +276,8 @@ function createTaskManager({
     if (!isPending(task)) return;
     try {
       checkTaskAccess(task);
-      const approved = await confirm({ command: task.command, cwd: task.cwd, workspaceId: task.workspaceId });
+      const approved = await confirm({ command: task.command, cwd: task.cwd, workspaceId: task.workspaceId,
+        ...(task.approval ? { approval: task.approval } : {}) });
       if (!isPending(task)) return;
       const workspace = checkTaskAccess(task);
       if (approved !== true) { finish(task, 'rejected', 'APPROVAL_DENIED'); return; }
@@ -242,6 +285,11 @@ function createTaskManager({
       if (!isPending(task)) return;
       checkTaskAccess(task);
       if (canonical !== task.cwd) { finish(task, 'cancelled', 'PATH_CHANGED'); return; }
+      // Internal project-task adapters bind approval to the exact manifest and
+      // recheck it after the local dialog. MCP schemas never accept callbacks.
+      if (task.beforeLaunch) await task.beforeLaunch();
+      if (!isPending(task)) return;
+      checkTaskAccess(task);
       launch(task);
     } catch (error) {
       if (!isPending(task)) return;
@@ -250,22 +298,25 @@ function createTaskManager({
     }
   }
 
-  async function start({ workspaceId, command, cwd, name = 'Terminal task', timeoutMs = 30_000 } = {}) {
-    const workspace = snapshot(workspaceId, 'terminal');
+  async function start({ workspaceId, command, cwd, name = 'Terminal task', timeoutMs = 30_000, approval, beforeLaunch } = {}) {
+    const workspace = snapshot(workspaceId, capability);
     validateCommandText(command);
     if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) fail('INVALID_PATH', 'An absolute workspace directory is required.');
     if (typeof name !== 'string' || !name.trim() || name.length > 80 || /[\x00-\x1f\x7f]/.test(name)) fail('INVALID_TASK_NAME', 'Use a short task name of 1 to 80 characters without control characters.');
     assertSafeContent(name);
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) fail('INVALID_TIMEOUT', 'Task timeout must be between 1 and 600000 milliseconds.');
-    if (activeCount() >= MAX_ACTIVE_TASKS) fail('TASK_LIMIT', 'At most three terminal tasks may run or await local approval.');
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) fail('INVALID_TIMEOUT', 'Task timeout must be between 1 and 3600000 milliseconds.');
+    if (beforeLaunch !== undefined && typeof beforeLaunch !== 'function') fail('INVALID_TASK', 'An internal validation callback is required.');
+    assertSlotAvailable();
     const absolutePath = await validatedCwd(workspace, cwd);
-    snapshot(workspace.id, 'terminal');
-    if (activeCount() >= MAX_ACTIVE_TASKS) fail('TASK_LIMIT', 'At most three terminal tasks may run or await local approval.');
+    snapshot(workspace.id, capability);
+    assertSlotAvailable();
     const timestamp = Date.now();
     const task = {
       id: crypto.randomBytes(16).toString('hex'), workspaceId, command, cwd: absolutePath,
       name: name.trim(), timeoutMs, state: 'awaiting_approval', createdAt: timestamp, updatedAt: timestamp,
-      output: [], outputBytes: 0, outputTruncated: false,
+      output: [], outputBytes: 0, totalOutputBytes: 0, outputTruncated: false,
+      decoder: new TextDecoder('utf-8', { fatal: true }), scanTail: '', outputWithheld: false,
+      approval, beforeLaunch,
     };
     tasks.set(task.id, task);
     task.approvalTimer = setTimeout(() => finish(task, 'rejected', 'APPROVAL_EXPIRED'), approvalDuration);
@@ -285,15 +336,24 @@ function createTaskManager({
     if (typeof includeOutput !== 'boolean') fail('INVALID_OUTPUT_OPTION', 'includeOutput must be a boolean.');
     const result = metadata(task);
     if (!includeOutput) return result;
+    if (task.outputWithheld) return { ...result, outputWithheld: true, outputNotice: 'Output was withheld because it may contain credentials or binary data.' };
     let output;
     try {
-      output = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(task.output));
+      let retained = Buffer.concat(task.output);
+      // Rolling eviction can split the first UTF-8 code point. Exclude only its
+      // continuation bytes; invalid data elsewhere remains fail closed.
+      let skipped = 0;
+      if (task.outputTruncated) while (skipped < retained.length && (retained[skipped] & 0xc0) === 0x80) skipped++;
+      retained = retained.subarray(skipped);
+      output = new TextDecoder('utf-8', { fatal: true }).decode(retained);
       assertSafeContent(output);
+      result.outputStartByte += skipped;
     }
     catch {
       return { ...result, outputWithheld: true, outputNotice: 'Output was withheld because it may contain credentials or binary data.' };
     }
-    return { ...result, output, outputWithheld: false };
+    return { ...result, output, outputWithheld: false,
+      ...(task.outputTruncated ? { outputNotice: 'Only the most recent output window is available; earlier output was discarded.' } : {}) };
   }
   function list({ workspaceId } = {}) {
     snapshot(workspaceId);
@@ -307,7 +367,7 @@ function createTaskManager({
   function cancelAll({ clear = false } = {}) {
     for (const task of tasks.values()) terminate(task, 'cancelled', 'CANCELLED');
     if (clear) {
-      for (const task of tasks.values()) { task.output.length = 0; task.command = ''; task.cwd = ''; }
+      for (const task of tasks.values()) { task.output.length = 0; task.command = ''; task.cwd = ''; task.approval = undefined; task.beforeLaunch = undefined; task.scanTail = ''; }
       tasks.clear();
     }
   }
@@ -317,7 +377,7 @@ function createTaskManager({
     disposed = true;
   }
 
-  return { start, get, list, cancel, cancelAll, dispose };
+  return { start, get, list, cancel, cancelAll, dispose, activeCount };
 }
 
-module.exports = { createTaskManager, safeTaskEnvironment, MAX_OUTPUT_BYTES, MAX_ACTIVE_TASKS, MAX_HISTORY };
+module.exports = { createTaskManager, safeTaskEnvironment, MAX_OUTPUT_BYTES, MAX_ACTIVE_TASKS, MAX_HISTORY, MAX_TIMEOUT_MS };

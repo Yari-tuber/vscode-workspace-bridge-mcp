@@ -376,7 +376,7 @@ test('extension starts read-only, exports metadata only, and revokes without wai
   const f = await extensionFixture(t);
   assert.equal(f.api.getStatus().running, false);
   await f.command('start');
-  assert.deepEqual(f.api.getStatus().access, { read: true, edit: false, terminal: false });
+  assert.deepEqual(f.api.getStatus().access, { read: true, edit: false, refactor: false, tasks: false, git: false, terminal: false });
   assert.equal(f.secrets.size, 1);
   assert.match([...f.secrets.values()][0], /^[a-f0-9]{64}$/);
   const statusKeys = Object.keys(f.api.getStatus()).sort();
@@ -386,7 +386,7 @@ test('extension starts read-only, exports metadata only, and revokes without wai
   const pendingAccess = f.command('setAccess');
   await f.command('stop');
   assert.equal(f.api.getStatus().running, false);
-  assert.deepEqual(f.api.getStatus().access, { read: false, edit: false, terminal: false });
+  assert.deepEqual(f.api.getStatus().access, { read: false, edit: false, refactor: false, tasks: false, git: false, terminal: false });
   assert.equal(f.closes(), 1);
   picker.resolve([{ key: 'edit' }]);
   await pendingAccess;
@@ -406,6 +406,17 @@ test('stop during startup closes the late server instead of exposing it', async 
   await Promise.all([starting, stopping]);
   assert.equal(closes, 1);
   assert.equal(f.api.getStatus().running, false);
+});
+
+test('local scoped grants expose every capability and disposal revokes the entire timed lease', async t => {
+  const f = await extensionFixture(t);
+  await f.command('start');
+  f.vscode.quickPickResponse = async (_items, options) => options.canPickMany
+    ? ['edit', 'refactor', 'tasks', 'git'].map(key => ({ key })) : { value: 1_800_000 };
+  await f.command('setAccess');
+  assert.deepEqual(f.api.getStatus().access, { read: true, edit: true, refactor: true, tasks: true, git: true, terminal: false });
+  await f.extension.deactivate();
+  assert.equal(Object.values(f.api.getStatus().access).some(Boolean), false);
 });
 
 test('workspace switches synchronously revoke access, stop, and remove old credentials', async t => {

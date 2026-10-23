@@ -8,6 +8,7 @@ const { startServer } = require('./server');
 const { createVscodeHost } = require('./vscode-host');
 const { createDashboard } = require('./dashboard');
 const { getToolCatalog } = require('./tools');
+const { CAPABILITIES, createPermissionLease } = require('./permission-lease');
 
 let activeDispose;
 
@@ -15,7 +16,13 @@ function activate(context) {
   const zh = /^zh(?:-|$)/i.test(vscode.env.language || '');
   const t = (en, cn) => zh ? cn : en;
   const windowNonce = crypto.randomBytes(16).toString('hex');
-  const access = { read: false, edit: false, terminal: false };
+  const access = Object.fromEntries(CAPABILITIES.map(key => [key, false]));
+  const lease = createPermissionLease(access, { onExpire() {
+    host.cancelTerminal();
+    host.clearRefactorPlans?.();
+    addAudit({ tool: 'bridge.access', status: 'expired' });
+    refresh();
+  } });
   const events = [];
   let bridge;
   let token;
@@ -27,7 +34,7 @@ function activate(context) {
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
   status.name = 'Workspace Bridge MCP';
   status.command = 'workspaceBridge.openDashboard';
-  const host = createVscodeHost({ vscode, getAccess: () => ({ ...access }), audit: addAudit, onTaskChange: queueRefresh });
+  const host = createVscodeHost({ vscode, getAccess: () => lease.get(), audit: addAudit, onTaskChange: queueRefresh });
   dashboard = createDashboard({ vscode, context, getState: dashboardState, onAction: dashboardAction });
   let secretKey = tokenKey();
 
@@ -59,7 +66,7 @@ function activate(context) {
   function dashboardState() {
     const workspace = host.getWorkspace();
     return { version: context.extension.packageJSON.version, running: Boolean(bridge), url: endpoint(),
-      workspace: { name: workspace.name, rootCount: workspace.roots.length, trusted: workspace.trusted }, access: { ...access },
+      workspace: { name: workspace.name, rootCount: workspace.roots.length, trusted: workspace.trusted }, access: lease.get(), grantExpiresAt: lease.expiresAt,
       tools: getToolCatalog(vscode.env.language), tasks: taskMetadata().map(task => ({ id: task.id, name: task.name, status: task.state,
         createdAt: new Date(task.createdAt).toISOString(), durationMs: Math.max(0, (task.finishedAt || Date.now()) - (task.startedAt || task.createdAt)),
         exitCode: task.exitCode, truncated: task.outputTruncated })), recentRequests: events.map(event => ({ ...event })) };
@@ -77,8 +84,9 @@ function activate(context) {
   function accessLabel() {
     if (!bridge) return t('No access', '未开放访问');
     const labels = [t('Read', '读取')];
-    if (access.edit) labels.push(t('Edit', '修改'));
-    if (access.terminal) labels.push(t('Terminal · confirm each command', '终端 · 逐次确认'));
+    for (const [key, en, cn] of [['edit', 'Edit', '修改'], ['refactor', 'Refactor', '重构'], ['tasks', 'Project tasks', '项目任务'], ['git', 'Git writes', 'Git 写入'], ['terminal', 'Terminal · confirm each command', '终端 · 逐次确认']]) {
+      if (lease.get()[key]) labels.push(t(en, cn));
+    }
     return labels.join(' · ');
   }
   function endpoint() {
@@ -151,7 +159,8 @@ function activate(context) {
     }
   }
   function revoke() {
-    access.read = false; access.edit = false; access.terminal = false;
+    lease.clear();
+    for (const key of CAPABILITIES) access[key] = false;
     host.resetSession();
     refresh();
   }
@@ -182,7 +191,7 @@ function activate(context) {
     }
     host.resetSession();
     const startSession = host.getWorkspace().id;
-    access.read = true; access.edit = false; access.terminal = false;
+    lease.grant([], 0); access.read = true;
     const requestedPort = config().get('port', 3338);
     const basePort = Number.isInteger(requestedPort) && requestedPort >= 0 && requestedPort <= 65525 ? requestedPort : 3338;
     const allowedHosts = config().get('allowedHosts', []);
@@ -200,7 +209,7 @@ function activate(context) {
       refresh();
       vscode.window.showInformationMessage(t(`Workspace Bridge is ready in read-only mode on port ${bridge.port}.`, `工作区桥接已启动，端口 ${bridge.port}，当前仅允许读取。`));
     } catch (error) {
-      access.read = false; access.edit = false; access.terminal = false;
+      lease.clear(); for (const key of CAPABILITIES) access[key] = false;
       host.resetSession(); refresh(); throw error;
     }
   }
@@ -252,8 +261,11 @@ function activate(context) {
     const sessionId = host.getWorkspace().id;
     const picked = await vscode.window.showQuickPick([
       { label: t('Allow edits', '允许修改'), description: t('This session only', '仅当前会话'), key: 'edit', picked: access.edit },
+      { label: t('Allow semantic refactoring', '允许语义重构'), description: t('Review multi-file rename, fixes and formatting', '预览跨文件改名、修复和格式化；应用时确认'), key: 'refactor', picked: access.refactor },
+      { label: t('Allow project tasks', '允许项目任务'), description: t('Run named npm scripts with local approval', '运行指定 npm 脚本；每次本机确认'), key: 'tasks', picked: access.tasks },
+      { label: t('Allow Git writes', '允许 Git 写入'), description: t('Stage, unstage and commit reviewed files', '暂存、取消暂存和提交已审阅内容；每次确认'), key: 'git', picked: access.git },
       { label: t('Allow terminal commands', '允许终端命令'), description: t('Full user permissions; confirm every command', '完整用户权限；每条命令单独确认'), key: 'terminal', picked: access.terminal },
-    ], { canPickMany: true, title: t('Session access', '当前会话权限'), placeHolder: t('Reading stays enabled. Uncheck both for read-only access.', '读取始终开启；全部取消即为只读。'), ignoreFocusOut: true });
+    ], { canPickMany: true, title: t('Session access', '当前会话权限'), placeHolder: t('Reading stays enabled. Uncheck all for read-only access.', '读取始终开启；全部取消即为只读。'), ignoreFocusOut: true });
     if (!picked || !bridge || host.getWorkspace().id !== sessionId) return;
     let terminal = picked.some(value => value.key === 'terminal');
     if (terminal && !access.terminal) {
@@ -266,10 +278,21 @@ function activate(context) {
       terminal = answer === enable;
     }
     if (!bridge || host.getWorkspace().id !== sessionId) return;
-    if (access.terminal && !terminal) host.cancelTerminal();
-    access.edit = picked.some(value => value.key === 'edit');
-    access.terminal = terminal;
-    addAudit({ tool: 'bridge.access', status: terminal ? 'terminal_enabled' : access.edit ? 'edit_enabled' : 'read_only' });
+    const keys = picked.map(value => value.key).filter(key => key !== 'terminal' || terminal);
+    let durationMs = 0;
+    if (keys.length) {
+      const duration = await vscode.window.showQuickPick([
+        { label: t('30 minutes', '30 分钟'), value: 1_800_000 },
+        { label: t('2 hours', '2 小时'), value: 7_200_000 },
+        { label: t('Until this bridge session ends', '直到当前桥接会话结束'), value: 0 },
+      ], { title: t('Permission duration', '授权有效期'), ignoreFocusOut: true });
+      if (!duration || !bridge || host.getWorkspace().id !== sessionId) return;
+      durationMs = duration.value;
+    }
+    if ((access.terminal && !terminal) || (access.tasks && !keys.includes('tasks'))) host.cancelTerminal();
+    if (access.refactor && !keys.includes('refactor')) host.clearRefactorPlans?.();
+    lease.grant(keys, durationMs);
+    addAudit({ tool: 'bridge.access', status: keys.length ? 'scoped_grant' : 'read_only' });
     refresh();
   }
   async function showStatus() {
@@ -295,7 +318,7 @@ function activate(context) {
     const report = {
       extension: 'workspace-bridge-mcp', version: context.extension.packageJSON.version,
       generatedAt: new Date().toISOString(), running: Boolean(bridge), endpoint: endpoint(),
-      access: { ...access }, workspace: { trusted: workspace.trusted, rootCount: workspace.roots.length },
+      access: lease.get(), workspace: { trusted: workspace.trusted, rootCount: workspace.roots.length },
       privacy: 'No tokens, paths, file contents, command text, or workspace names are included.',
       recentRequests: events.map(event => ({ ...event })),
     };
@@ -337,7 +360,8 @@ function activate(context) {
   activeDispose = async () => {
     if (disposed) return;
     disposed = true;
-    access.read = false; access.edit = false; access.terminal = false;
+    lease.clear();
+    for (const key of CAPABILITIES) access[key] = false;
     host.resetSession();
     clearTimeout(refreshTimer);
     clearInterval(taskRefreshTimer);
@@ -354,7 +378,7 @@ function activate(context) {
   context.subscriptions.push({ dispose: () => { void activeDispose(); } });
   refresh();
   if (config().get('autoStart', false)) run(start);
-  return Object.freeze({ getStatus: () => ({ running: Boolean(bridge), url: endpoint(), access: { ...access }, workspaceId: host.getWorkspace().id }) });
+  return Object.freeze({ getStatus: () => ({ running: Boolean(bridge), url: endpoint(), access: lease.get(), workspaceId: host.getWorkspace().id }) });
 }
 
 async function deactivate() { if (activeDispose) await activeDispose(); }
