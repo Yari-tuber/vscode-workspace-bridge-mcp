@@ -14,7 +14,9 @@ function assertWorkspace(host, id, { capability = 'read' } = {}) {
   if (!workspace.roots?.length || workspace.roots.some(r => typeof r.path !== 'string')) deny('NO_WORKSPACE', 'Open a local folder first.');
   if (id !== undefined && id !== workspace.id) deny('WORKSPACE_CHANGED', 'The workspace changed. Call workspace_overview and start a new operation.');
   if (host.getAccess()?.[capability] !== true) deny('ACCESS_DENIED', `The ${capability} capability is disabled. Enable it in the local Workspace Bridge panel.`);
-  return workspace;
+  // Keep async operations bound to the identity and roots they actually checked,
+  // even if an adapter later mutates its current-workspace object in place.
+  return { ...workspace, roots: workspace.roots.map(root => ({ ...root })) };
 }
 const visibleDot = new Set(['.github', '.gitignore', '.gitattributes', '.editorconfig', '.prettierrc', '.prettierrc.json', '.eslintrc.json']);
 function isSensitivePath(relative) {

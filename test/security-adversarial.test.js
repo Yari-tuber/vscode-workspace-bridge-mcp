@@ -37,7 +37,7 @@ async function fixture(t) {
 test('workspace authorization binds trust, capabilities, and current identity', () => {
   const workspace = { id: 'workspace-one', trusted: true, roots: [{ name: 'fixture', path: process.cwd() }] };
   const host = { getWorkspace: () => workspace, getAccess: () => ({ read: true, edit: false, terminal: false }) };
-  assert.equal(assertWorkspace(host, workspace.id), workspace);
+  assert.deepEqual(assertWorkspace(host, workspace.id), workspace);
   assert.throws(() => assertWorkspace(host, 'stale-workspace'), safeFailure);
   for (const capability of ['edit', 'terminal']) assert.throws(() => assertWorkspace(host, workspace.id, { capability }), safeFailure);
   workspace.trusted = false;

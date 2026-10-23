@@ -10,6 +10,7 @@ async function run() {
   await vscode.window.showTextDocument(document, { preview: false });
   await vscode.commands.executeCommand('workbench.view.extension.workspaceBridge');
   await vscode.commands.executeCommand('workspaceBridge.start');
+  await vscode.commands.executeCommand('workspaceBridge.openDashboard');
   if (!api.getStatus().running) throw new Error('Demo bridge did not start.');
   await fs.writeFile(process.env.BRIDGE_DEMO_READY, JSON.stringify({ title: 'Workspace Bridge MCP · Demo', running: true, version: extension.packageJSON.version }));
   const deadline = Date.now() + 10 * 60 * 1000;

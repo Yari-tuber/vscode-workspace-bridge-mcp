@@ -1,12 +1,12 @@
-Workspace Bridge MCP 0.2.0 makes everyday editing more precise and the setup easier to understand.
+Workspace Bridge MCP 0.3.0 expands the editor bridge from 15 to 27 tools and adds a full control center.
 
-- **On-demand editor context:** inspect the active allowed file and selection positions; selected text is returned only when explicitly requested.
-- **Hover information:** use the installed language service for bounded type/documentation text, with timeout and stale-document checks.
-- **Precise edits:** apply non-overlapping UTF-16 ranges or one unique literal replacement. Both default to a native diff preview and retain current-hash, version and per-file concurrency checks.
-- **Better onboarding:** copy a starter prompt from the sidebar. The bilingual READMEs now include original diagrams, real screenshots made with synthetic sample data, and a short installation path.
+- **Work across files:** batch reads, workspace symbol search, type definitions, implementation navigation and local file review.
+- **Organize a project:** create safe directories, move saved UTF-8 files without overwriting, and send individual files to system Trash only after local confirmation and hash checks.
+- **Follow long checks:** start locally approved command tasks, query status and filtered output, or cancel bridge-owned tasks. Stopping processes keep their concurrency slots until they actually close.
+- **See the controls:** a bilingual, theme-aware panel for connection, permissions, searchable tools, task states and metadata-only activity. Native sidebar controls remain available.
 
-The server provides 15 tools. Bearer authentication, loopback binding, workspace-root checks, read-only startup and per-command local terminal approval remain in place. The source is MIT licensed; third-party notices are included. Related-project research is documented without importing upstream implementations or imagery.
+The server still starts read-only, binds loopback, requires a bearer token and preserves workspace/path checks. Command tasks use full user privileges after approval, not an OS sandbox. Filesystem, network or other side effects already produced by a command are not undone by cancellation. Trash never falls back to permanent deletion.
 
-Install the attached VSIX using **Extensions: Install from VSIX**, open a trusted folder and run **Workspace Bridge: Start Bridge**. Copy the connection configuration only into a trusted MCP client: it contains a secret token. Read the setup guide for connection-format and OAuth compatibility limits.
+Install the attached VSIX with Extensions: Install from VSIX, open a trusted folder, then run Workspace Bridge: Open Control Center. Use the setup guide to connect a compatible Streamable HTTP client. Copied client configuration contains a secret token; keep it private. No automatic public tunnel or OAuth service is included.
 
-The checksum file applies to the attached package. See the workflow for this tag and docs/VALIDATION.md for the exact acceptance scope. No automatic public tunnel, telemetry or operating-system command sandbox is provided; approved terminal commands have user-level permissions.
+See docs/VALIDATION.md and the workflow for this release commit for the exact test scope. Verify the attached package against SHA256SUMS.txt before installing.

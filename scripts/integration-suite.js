@@ -17,6 +17,12 @@ async function run() {
   const extension = vscode.extensions.getExtension('workspace-bridge.vscode-workspace-bridge-mcp');
   assert.ok(extension);
   const api = await extension.activate();
+  await check('the control-center command opens a real VS Code webview editor', async () => {
+    await vscode.commands.executeCommand('workspaceBridge.openDashboard');
+    const deadline = Date.now() + 5000;
+    while (!vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label === 'Workspace Bridge')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
+    assert.ok(vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label === 'Workspace Bridge')));
+  });
   await check('extension activates with access disabled', () => {
     assert.equal(api.getStatus().running, false); assert.equal(api.getStatus().access.read, false);
   });
@@ -111,6 +117,69 @@ async function run() {
       const read = data(await client.callTool({ name: 'read_file', arguments: { ...args, path: 'created.txt' } }));
       assert.equal(read.hash, hashText(saved));
       assert.equal((await client.callTool({ name: 'write_file', arguments: newArgs })).isError, true);
+    });
+    await check('batch reads return independent hashes and isolate forbidden files', async () => {
+      const result = data(await client.callTool({ name: 'read_files', arguments: { workspaceId: overview.workspaceId, files: [{ path: 'hello.js' }, { path: 'created.txt' }, { path: '.env' }] } }));
+      assert.equal(result.files[0].hash, hashText(await fs.readFile(path.join(root, 'hello.js'), 'utf8')));
+      assert.equal(result.files[1].path, 'created.txt'); assert.equal(result.files[2].error.code, 'SENSITIVE_PATH');
+    });
+    await check('workspace symbols and type/implementation navigation use real registered providers', async () => {
+      const uri = vscode.Uri.file(path.join(root, 'hello.js'));
+      const range = new vscode.Range(0, 6, 0, 12);
+      const location = new vscode.Location(uri, range);
+      const providers = [
+        vscode.languages.registerWorkspaceSymbolProvider({ provideWorkspaceSymbols: () => [new vscode.SymbolInformation('IntegrationProbe', vscode.SymbolKind.Variable, '', location)] }),
+        vscode.languages.registerTypeDefinitionProvider({ language: 'javascript', scheme: 'file' }, { provideTypeDefinition: () => [location] }),
+        vscode.languages.registerImplementationProvider({ language: 'javascript', scheme: 'file' }, { provideImplementation: () => [location] })
+      ];
+      try {
+        const symbols = data(await client.callTool({ name: 'search_workspace_symbols', arguments: { workspaceId: overview.workspaceId, query: 'IntegrationProbe' } }));
+        assert.ok(symbols.symbols.some(symbol => symbol.name === 'IntegrationProbe' && symbol.path === 'hello.js'));
+        for (const name of ['get_type_definition', 'get_implementations']) {
+          const result = data(await client.callTool({ name, arguments: { ...args, line: 0, character: 8 } }));
+          assert.ok(result.locations.some(item => item.path === 'hello.js'));
+        }
+      } finally { providers.forEach(provider => provider.dispose()); }
+    });
+    await check('safe directories and a non-overwriting file move work through the real editor APIs', async () => {
+      const created = data(await client.callTool({ name: 'create_directory', arguments: { workspaceId: overview.workspaceId, path: 'generated/api' } }));
+      assert.ok(created.created.length >= 1);
+      const snapshot = data(await client.callTool({ name: 'read_file', arguments: { ...args, path: 'created.txt' } }));
+      const moved = data(await client.callTool({ name: 'move_file', arguments: { ...args, path: 'created.txt', targetPath: 'generated/api/moved.txt', expectedHash: snapshot.hash } }));
+      assert.equal(moved.moved, true); assert.equal(moved.to.path, 'generated/api/moved.txt');
+      await assert.rejects(() => fs.access(path.join(root, 'created.txt')));
+      assert.match(await fs.readFile(path.join(root, 'generated', 'api', 'moved.txt'), 'utf8'), /Created in the isolated/);
+    });
+    await check('an allowed file can be opened locally for review without changing it', async () => {
+      const result = data(await client.callTool({ name: 'open_file', arguments: { ...args, line: 0 } }));
+      assert.equal(result.opened, true); assert.equal(vscode.window.activeTextEditor.document.uri.fsPath, path.join(root, 'hello.js'));
+    });
+    await check('a background task completes over MCP with controlled synthetic local approval', async () => {
+      // Inherit lazily: enumerating VS Code namespaces invokes proposed-API
+      // getters that are unrelated to this controlled approval fixture.
+      const testVscode = Object.create(vscode);
+      Object.defineProperty(testVscode, 'window', { value: Object.create(vscode.window) });
+      Object.defineProperty(testVscode.window, 'showWarningMessage', { value: async (_message, options, ...actions) => {
+        assert.match(options.detail, /echo bridge-task-fixture/); return actions[0];
+      } });
+      const taskHost = createVscodeHost({ vscode: testVscode, getAccess: () => ({ read: true, edit: false, terminal: true }) });
+      // Use a fresh server credential, held only in the test process.
+      const taskToken = crypto.randomBytes(32).toString('hex');
+      const liveServer = await startServer({ host: taskHost, token: taskToken, port: 0 });
+      const taskClient = new Client({ name: 'task-runtime-test', version: '1.0.0' });
+      try {
+        await taskClient.connect(new StreamableHTTPClientTransport(new URL(liveServer.url), { requestInit: { headers: { Authorization: `Bearer ${taskToken}` } } }));
+        const taskWorkspace = data(await taskClient.callTool({ name: 'workspace_overview', arguments: {} }));
+        const task = data(await taskClient.callTool({ name: 'start_terminal_task', arguments: { workspaceId: taskWorkspace.workspaceId, command: 'echo bridge-task-fixture', timeoutMs: 5000 } }));
+        assert.equal(task.state, 'awaiting_approval');
+        let result; const deadline = Date.now() + 10000;
+        do {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          result = data(await taskClient.callTool({ name: 'get_terminal_task', arguments: { workspaceId: taskWorkspace.workspaceId, id: task.id, includeOutput: true } }));
+        } while (['awaiting_approval', 'running', 'stopping'].includes(result.state) && Date.now() < deadline);
+        assert.equal(result.state, 'completed'); assert.equal(result.exitCode, 0); assert.match(result.output, /bridge-task-fixture/);
+        assert.equal(Object.hasOwn(result, 'command'), false); assert.equal(Object.hasOwn(result, 'cwd'), false);
+      } finally { await taskClient.close(); await liveServer.close(); taskHost.dispose(); }
     });
     await check('diagnostics filter outside files and return relative paths', async () => {
       const collection = vscode.languages.createDiagnosticCollection('bridge-runtime-test');

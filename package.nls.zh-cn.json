@@ -16,5 +16,6 @@
   "configuration.autoStart": "打开此可信工作区时，自动启动本地只读桥接。修改和终端权限每次会话都必须在本机单独开启。",
   "configuration.port": "首选本地端口。被占用时依次尝试后续 9 个端口，并显示实际连接地址。设为 0 时自动分配端口。",
   "configuration.allowedHosts": "本地服务额外允许的精确 HTTP Host 名称，默认为空。此设置不会创建隧道或开放公网监听。仅填写你控制的名称。",
-  "command.copyPrompt": "复制起步提示词"
+  "command.copyPrompt": "复制起步提示词",
+  "command.openDashboard": "打开控制台"
 }

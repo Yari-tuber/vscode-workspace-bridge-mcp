@@ -13,23 +13,40 @@
 
 <p align="center">
   <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a><br />
-  <a href="#start-in-three-steps">Get started</a> · <a href="docs/TOOLS.md">Tool reference</a> · <a href="docs/GETTING-STARTED.md">Setup guide</a> · <a href="SECURITY.md">Security</a>
+  <a href="#start-in-three-steps">Get started</a> · <a href="docs/DASHBOARD.md">Control center</a> · <a href="docs/TOOLS.md">Tool reference</a> · <a href="docs/GETTING-STARTED.md">Setup guide</a> · <a href="SECURITY.md">Security</a>
 </p>
 
-**Give your AI client the context already available in VS Code.** Read live files, follow symbols, inspect diagnostics, and prepare precise edits—with access controlled in the editor.
+**Give your AI client a practical workflow inside VS Code.** Read related files together, navigate symbols, prepare precise edits, organize text files, and follow approved command tasks—with access controlled in the editor.
 
 Workspace Bridge is an **MCP server inside VS Code**. External MCP clients connect to it. VS Code's built-in MCP support goes in the other direction: it makes VS Code a client of other servers. You do not need to add this extension as a server inside VS Code to expose the workspace.
 
 > **Connection requirement:** Streamable HTTP with a custom `Authorization: Bearer …` header. Bearer authentication is not OAuth; hosted connectors that require OAuth may be incompatible. The bridge does not create a public tunnel.
 
-![Workspace Bridge running in VS Code with its connection panel and a sample file](media/screenshots/control-panel.jpg)
+![Workspace Bridge v0.3 control center running in VS Code](media/screenshots/control-center-v3.jpg)
 
-*Real screenshot of v0.2.0 in an isolated VS Code development profile. The sample project is synthetic; no token or personal project is shown. The banner and workflow below are original illustrations.*
+*Real v0.3.0 screenshot in an isolated development profile, with a synthetic demo workspace. No user project, credential or unrelated window is included.*
+
+## One control center, from connection to completion
+
+Open **Workspace Bridge: Open Control Center** from the Command Palette, the bridge sidebar, or the status bar. See the active workspace and permissions, search the **27-tool directory**, follow background tasks, cancel bridge-owned work, and inspect recent request metadata in one editor panel.
+
+The control center supports English and Chinese, keyboard navigation, narrow editor groups, and the active VS Code theme. It never displays tokens, command text, or terminal output. **Copy client configuration** intentionally copies a token into your clipboard; use it only in a trusted client.
+
+[Explore the control center →](docs/DASHBOARD.md)
+
+<details>
+<summary>Earlier interface: v0.2.0 native sidebar</summary>
+
+![Workspace Bridge v0.2.0 running in VS Code with its connection sidebar and a sample file](media/screenshots/control-panel.jpg)
+
+*Real v0.2.0 screenshot from an isolated VS Code development profile and a synthetic sample project. The native sidebar remains available; this image predates the v0.3 control center. No token or personal project is shown. The banner and workflow illustrations are original project assets.*
+
+</details>
 
 ## Start in three steps
 
 1. **Install.** Download the `.vsix` from [Releases](https://github.com/Yari-tuber/vscode-workspace-bridge-mcp/releases/latest), verify its checksum, then choose **Extensions → … → Install from VSIX…** in VS Code.
-2. **Start.** Open a trusted folder, open **Workspace Bridge** in the Activity Bar, and select **Start bridge**. Confirm the workspace shown in the panel.
+2. **Start.** Open a trusted folder, open **Workspace Bridge** in the Activity Bar, and select **Open control center → Start bridge**. Confirm the workspace shown in the panel.
 3. **Connect.** Select **Copy client configuration**, add it to a compatible MCP client, then use **Copy starter prompt** to begin with workspace discovery and reading.
 
 The bridge starts with read access; editing and terminal execution stay off until you enable them locally. Each window has its own token. Connection configuration contains that secret—keep it in protected client settings, out of repositories and chat messages.
@@ -40,13 +57,14 @@ The bridge starts with read access; editing and terminal execution stay off unti
 
 | Your goal | What the bridge provides |
 | --- | --- |
-| **Find your way around** | Workspace identity, safe entry-file samples, directory listing, literal text search, and live file reads—including unsaved editor changes. |
-| **Understand the code** | Existing diagnostics, document symbols, definitions, references, hover information, and active-file/selection metadata from VS Code. Language features depend on the installed language service. |
+| **Read a useful slice of the project** | Workspace discovery, safe file listing, literal search, and batch reads of up to ten related files—including unsaved editor changes and per-file hashes. |
+| **Navigate the code** | Workspace and document symbols, definitions, type definitions, implementations, references, hover, diagnostics, and opening an allowed file for local review. Language features use installed providers. |
 | **Make a precise change** | Local diff previews, hash-checked whole-file writes, range edits, and unique literal replacements. Range edits and replacements **preview by default**. |
-| **Run a relevant check** | Bounded terminal execution after you enable access and approve the individual command in VS Code. |
-| **Manage the connection** | Local control panel, status bar, connection copying, token rotation, starter prompt, and sanitized bridge diagnostics. |
+| **Organize project text files** | Create safe directories, move one saved text file without overwriting, or send one file to Trash after local confirmation. No recursive deletion or permanent-delete fallback. |
+| **Run and follow a check** | Short foreground commands or named background tasks with status polling, optional bounded output, and cancellation. Enable access locally and approve every command. |
+| **Stay in control** | A theme-aware control center with searchable tools, permission states, owned tasks, request metadata, connection copying, token rotation, and local diagnostics export. |
 
-The server exposes **15 tools** and the `review_workspace` prompt. The [tool reference](docs/TOOLS.md) documents arguments, result limits, and the read–preview–edit sequence. Active selection text is returned only when the client explicitly requests it.
+The server exposes **27 tools** and the `review_workspace` prompt. v0.3 adds batch reading, wider code navigation, text-file lifecycle tools, and asynchronous command tasks. The [tool reference](docs/TOOLS.md) documents exact arguments and limits. Active selection text and background-task output are returned only when explicitly requested.
 
 <p align="center">
   <img src="media/readme-workflow.png" alt="An MCP client connects over authenticated Streamable HTTP to Workspace Bridge in VS Code, which accesses the trusted workspace through editor APIs. Read access comes first, editing is opt-in, and each terminal command needs local approval." width="1280" />
@@ -57,11 +75,13 @@ The server exposes **15 tools** and the `review_workspace` prompt. The [tool ref
 | Capability | Initial state | Local control |
 | --- | --- | --- |
 | Read allowed files and editor context | Available when the bridge runs in a trusted workspace | Stop the bridge to end access. File tools enforce the selected workspace boundary and filtering. |
-| Preview or save edits | **Off** | Enable editing for this session. Existing-file changes need the current SHA-256; a stale snapshot is rejected. |
+| Preview edits, save, create directories, move or trash text files | **Off** | Enable editing for this session. Existing-file changes need the current SHA-256; moving/trashing also rejects unsaved changes. Each Trash operation requires local confirmation. |
 | Execute a terminal command | **Off** | Enable terminal access, then approve **each command** and its working directory. |
 | Reach the bridge remotely | Loopback listener only | Configure your own HTTPS forwarding and allowed hostname. See [remote access](docs/REMOTE-ACCESS.md). |
 
 Stopping the bridge or changing workspaces resets editing and terminal grants. Reloading a window creates a new token; rotation revokes the old one immediately. Use the configuration from the intended window and rediscover its workspace before making changes.
+
+Background tasks are session-only: at most three can await approval, run, or stop at once. A task ID or `awaiting_approval` response is not completion. Poll its state, inspect the final result, and remember that cancellation or failure does not undo effects the command already produced.
 
 **Approved terminal commands use your operating-system account; they are not sandboxed.** They can access files outside the workspace and use the network.
 
@@ -91,7 +111,7 @@ Try a first request such as:
 
 - **Local by default.** Loopback binding, bearer authentication, VS Code SecretStorage, and no telemetry. Copying the configuration intentionally places a token on the clipboard and in your chosen client.
 - **Constrained file tools.** Relative paths, real-path checks, link rejection, sensitive-name/content filtering, and bounded results. Filters cannot recognize every secret or provide operating-system isolation.
-- **Minimal bridge records.** Activity logs and exported bridge diagnostics omit file contents, terminal output, tokens, and user absolute paths. Requested file, language-service, and command results still go to the client and follow its retention policies.
+- **Minimal bridge records.** The control center, activity logs, and exported bridge diagnostics omit file contents, command text, terminal output, tokens, and user absolute paths. Requested file, language-service, and command results still go to the client and follow its retention policies.
 
 Read the [security policy](SECURITY.md), [threat model](docs/THREAT-MODEL.md), and [audit notes](docs/SECURITY-AUDIT.md) before exposing an endpoint or enabling terminal access. Passing tests and scans do not prove that every vulnerability is absent.
 
@@ -121,6 +141,7 @@ Integration tests use a separate VS Code profile and temporary workspace. They d
 | Resource | Purpose |
 | --- | --- |
 | [Setup & troubleshooting](docs/GETTING-STARTED.md) | Installation, settings, token lifecycle, and connection errors |
+| [Control center](docs/DASHBOARD.md) | Searchable capabilities, permissions, owned tasks, and request metadata |
 | [Tools & examples](docs/TOOLS.md) | Schemas, line conventions, editing workflow, and error handling |
 | [Remote access](docs/REMOTE-ACCESS.md) | HTTPS forwarding, host validation, and remote environments |
 | [Related projects & design notes](docs/RELATED-PROJECTS.md) | Comparable bridges, design references, and future work |

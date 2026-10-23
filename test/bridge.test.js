@@ -37,7 +37,7 @@ test('official SDK client initializes, browses, reads, and obtains a review prom
   const client = new Client({ name: 'integration-client', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
   await client.connect(transport); t.after(() => client.close());
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 15);
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 27);
   const overview = value(await client.callTool({ name: 'workspace_overview', arguments: {} }));
   assert.equal(overview.workspaceId, 'test-session'); assert.equal(JSON.stringify(overview).includes(root), false);
   const read = value(await client.callTool({ name: 'read_file', arguments: { workspaceId: overview.workspaceId, path: 'hello.js' } }));

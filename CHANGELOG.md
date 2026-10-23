@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Expanded from 15 to 27 tools: batch file reads, workspace symbols, type/implementation navigation, local file review, safe directory creation, saved text-file moves, confirmed Trash operations, and asynchronous command tasks.
+- Added a bilingual, theme-aware control center with searchable tools, permission status, task cancellation and metadata-only activity. Kept the compact native sidebar.
+- Background commands require local approval, support status/output queries and cancellation, and keep process slots occupied until the actual child exits. Three-active-task, ten-minute and output budgets apply.
+- File lifecycle operations check current editor and disk state. They reject dirty files and overwrites; deletion only requests the system Trash after local per-file confirmation.
+- Kept asynchronous operations bound to copied workspace identities, and added bounded/stale-result checks for language navigation.
+
+
 ## 0.2.0
 
 - Added on-demand active editor context. Selection text is excluded unless explicitly requested.

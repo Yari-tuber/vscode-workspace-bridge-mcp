@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are developed for the latest released version. Version 0.2.0 is an early release; do not assume an independent security certification or a guarantee that every vulnerability has been found.
+Security fixes are developed for the latest released version. Version 0.3.0 is an early release; do not assume an independent security certification or a guarantee that every vulnerability has been found.
 
 ## Report a vulnerability privately
 
@@ -21,6 +21,12 @@ There is no promised response time or bug bounty. Coordinated disclosure is appr
 - Session permissions reset when the server stops or the workspace changes. Requests must identify the active workspace; a mismatching workspace identifier is rejected.
 
 Sensitive-name and content filtering cannot recognize every secret. Once an allowed file or terminal result is returned to a client, the client's own storage, logging, model-provider, and retention policies apply. The extension cannot retract that data.
+
+## File and task operations
+
+Saved text-file moves refuse overwrites and dirty editors. `delete_file` additionally requires local confirmation for each file and only requests the system Trash; unsupported Trash fails without permanent-delete fallback. Directory deletion is not exposed.
+
+Background commands share the terminal approval boundary. Task IDs identify only this bridge's own session tasks, not arbitrary OS processes. Output retrieval is explicit and filtered. Commands may already have changed files or network state before cancellation or failure; those effects are not rolled back. Use foreground commands: software that deliberately detaches can outlive ordinary process-tree cancellation. This is not OS process isolation.
 
 ## Remote access
 

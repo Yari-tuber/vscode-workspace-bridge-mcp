@@ -2,7 +2,7 @@
   "name": "vscode-workspace-bridge-mcp",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "workspace-bridge",
   "license": "MIT",
   "engines": {
@@ -108,10 +108,21 @@
         "title": "%command.copyPrompt%",
         "category": "%command.category%",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "workspaceBridge.openDashboard",
+        "title": "%command.openDashboard%",
+        "category": "%command.category%",
+        "icon": "$(dashboard)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "workspaceBridge.openDashboard",
+          "when": "view == workspaceBridge.control",
+          "group": "navigation"
+        },
         {
           "command": "workspaceBridge.status",
           "when": "view == workspaceBridge.control",

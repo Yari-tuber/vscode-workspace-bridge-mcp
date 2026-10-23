@@ -6,23 +6,21 @@ const childProcess = require('node:child_process');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const defaultSecurity = require('./security');
+const { createTaskManager, safeTaskEnvironment } = require('./task-manager');
+const { createWorkspaceOps } = require('./workspace-ops');
 
 const MAX_OUTPUT_BYTES = 64_000;
 const MAX_COMMAND_LENGTH = 8_192;
-const ENV_ALLOWLIST = new Set([
-  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR',
-  'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'LANG', 'LC_ALL', 'TERM',
-  'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432',
-]);
 
 function safeEnvironment(source = process.env) {
-  return Object.fromEntries(Object.entries(source).filter(([key]) => ENV_ALLOWLIST.has(key.toUpperCase())));
+  return safeTaskEnvironment(source);
 }
 
-function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defaultSecurity, approvalTimeoutMs = 30_000, languageTimeoutMs = 10_000 }) {
+function createVscodeHost({ vscode, getAccess, audit = () => {}, onTaskChange = () => {}, security = defaultSecurity, approvalTimeoutMs = 30_000, languageTimeoutMs = 10_000 }) {
   const { BridgeError, assertWorkspace, resolvePath, assertSafeContent, toRelative, hashText } = security;
   let epoch = crypto.randomBytes(16).toString('hex');
   let rootBindings;
+  let taskManager;
   const children = new Set();
   const pendingApprovals = new Set();
   const fileLocks = new Map();
@@ -73,7 +71,9 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
   function killChild(child) {
     if (!child.pid) return;
     if (process.platform === 'win32') {
-      const killer = childProcess.spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      const systemRoot = process.env.SystemRoot || process.env.WINDIR;
+      if (!systemRoot) { try { child.kill(); } catch {} return; }
+      const killer = childProcess.spawn(path.join(systemRoot, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], {
         windowsHide: true, stdio: 'ignore', env: safeEnvironment(),
       });
       killer.on('error', () => { try { child.kill(); } catch {} });
@@ -83,6 +83,7 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
   }
 
   function resetSession() {
+    taskManager?.cancelAll({ clear: true });
     epoch = crypto.randomBytes(16).toString('hex');
     rootBindings = undefined;
     previews.clear();
@@ -94,6 +95,7 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
     if (tabs.length) Promise.resolve(vscode.window.tabGroups.close(tabs, true)).catch(() => {});
   }
   function cancelTerminal() {
+    taskManager?.cancelAll({ clear: false });
     for (const cancel of pendingApprovals) cancel();
     pendingApprovals.clear();
     for (const child of children) killChild(child);
@@ -140,9 +142,13 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
 
   async function readForWorkspace(workspace, inputPath, capability = 'read') {
     const absolutePath = await checkedPath(workspace, inputPath, { capability });
+    const stat = await fs.stat(absolutePath);
+    recheck(workspace, capability);
+    if (stat.size > 512 * 1024) fail('FILE_TOO_LARGE', 'Files must be at most 512 KiB.');
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
     await checkedPath(workspace, absolutePath, { capability });
     const text = document.getText();
+    if (Buffer.byteLength(text, 'utf8') > 512 * 1024) fail('FILE_TOO_LARGE', 'The editor buffer is too large.');
     assertSafeContent(text);
     return { text, version: document.version, languageId: document.languageId, isDirty: document.isDirty };
   }
@@ -373,23 +379,73 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
     return { hovers, truncated, untrusted: true };
   }
 
+  async function languageRequest(operation) {
+    let timer;
+    try {
+      return await Promise.race([Promise.resolve().then(operation), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new BridgeError('LANGUAGE_TIMEOUT', 'The language service did not respond in time. Retry after it finishes loading.')), providerTimeoutMs);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+
+  function validRange(range) {
+    if (!range?.start || !range?.end) return false;
+    const points = [range.start, range.end];
+    return points.every(p => Number.isInteger(p.line) && p.line >= 0 && p.line <= 1000000 && Number.isInteger(p.character) && p.character >= 0 && p.character <= 1000000)
+      && (range.start.line < range.end.line || (range.start.line === range.end.line && range.start.character <= range.end.character));
+  }
+
+  async function searchWorkspaceSymbols({ workspaceId, query, limit = 50 }) {
+    const workspace = snapshot(workspaceId);
+    if (typeof query !== 'string' || !query.trim() || query.length > 200 || !Number.isInteger(limit) || limit < 1 || limit > 100) fail('INVALID_QUERY', 'Provide a symbol query of 1 to 200 characters and a limit of 1 to 100.');
+    assertSafeContent(query);
+    const supplied = await languageRequest(() => vscode.commands.executeCommand('vscode.executeWorkspaceSymbolProvider', query));
+    recheck(workspace);
+    if (supplied !== undefined && !Array.isArray(supplied)) fail('INVALID_LANGUAGE_RESULT', 'The language service returned an unsupported result.');
+    const symbols = []; let inspected = 0;
+    for (const symbol of supplied || []) {
+      if (++inspected > 1000 || symbols.length >= limit) break;
+      const location = symbol?.location;
+      if (!location?.uri || location.uri.scheme !== 'file' || !relativeInput(workspace, location.uri.fsPath) || !validRange(location.range)) continue;
+      if (typeof symbol.name !== 'string' || !symbol.name || symbol.name.length > 500) continue;
+      assertSafeContent(symbol.name);
+      try {
+        const absolute = await checkedPath(workspace, location.uri.fsPath);
+        symbols.push({ name: redactPaths(symbol.name, workspace), kind: Number.isInteger(symbol.kind) ? symbol.kind : undefined,
+          ...toRelative(workspace, absolute), range: rangeValue(location.range) });
+      } catch (error) { recheck(workspace); if (error.code === 'ACCESS_DENIED' || error.code === 'WORKSPACE_CHANGED') throw error; }
+    }
+    recheck(workspace);
+    return { symbols, truncated: inspected > 1000 || (symbols.length >= limit && inspected < (supplied || []).length), untrusted: true };
+  }
+
   async function locations(command, { path: inputPath, line, character, workspaceId }) {
     const workspace = snapshot(workspaceId);
     const absolutePath = await checkedPath(workspace, inputPath);
     if (!Number.isInteger(line) || line < 0 || !Number.isInteger(character) || character < 0) fail('INVALID_POSITION', 'Line and character must be non-negative integers.');
-    await readForWorkspace(workspace, absolutePath);
+    const document = await readForWorkspace(workspace, absolutePath);
+    const lines = document.text.split(/\r\n|\r|\n/);
+    if (line >= lines.length || character > lines[line].length) fail('INVALID_POSITION', 'The position is outside the current document.');
     recheck(workspace);
-    const locations = await vscode.commands.executeCommand(command, vscode.Uri.file(absolutePath), new vscode.Position(line, character));
+    const locations = await languageRequest(() => vscode.commands.executeCommand(command, vscode.Uri.file(absolutePath), new vscode.Position(line, character)));
     await checkedPath(workspace, absolutePath);
+    const live = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
+    recheck(workspace);
+    if (live.version !== document.version) fail('DOCUMENT_CHANGED', 'The document changed while the language service was running. Request its locations again.');
+    if (locations !== undefined && !Array.isArray(locations)) fail('INVALID_LANGUAGE_RESULT', 'The language service returned an unsupported result.');
     const result = [];
     for (const location of (locations || []).slice(0, 200)) {
+      if (!location || typeof location !== 'object') continue;
       const uri = location.targetUri || location.uri;
-      if (!uri || uri.scheme !== 'file' || !relativeInput(workspace, uri.fsPath)) continue;
+      const range = location.targetSelectionRange || location.targetRange || location.range;
+      if (!uri || uri.scheme !== 'file' || !relativeInput(workspace, uri.fsPath) || !validRange(range)) continue;
       try {
         const targetPath = await checkedPath(workspace, uri.fsPath);
-        result.push({ ...toRelative(workspace, targetPath), range: rangeValue(location.targetSelectionRange || location.targetRange || location.range) });
+        result.push({ ...toRelative(workspace, targetPath), range: rangeValue(range) });
       } catch { recheck(workspace); }
     }
+    recheck(workspace);
+    if (live.version !== document.version) fail('DOCUMENT_CHANGED', 'The document changed while resolving its locations. Request them again.');
     return result;
   }
 
@@ -511,13 +567,26 @@ function createVscodeHost({ vscode, getAccess, audit = () => {}, security = defa
 
   const host = {
     getWorkspace, getAccess: () => { const current = getAccess(); return { read: current.read === true, edit: current.edit === true, terminal: current.terminal === true }; },
-    readDocument, applyEdit, getDiagnostics, getSymbols, getEditorContext, getHover,
+    readDocument, applyEdit, getDiagnostics, getSymbols, getEditorContext, getHover, searchWorkspaceSymbols,
     getDefinition: input => locations('vscode.executeDefinitionProvider', input),
     getReferences: input => locations('vscode.executeReferenceProvider', input),
+    getTypeDefinition: input => locations('vscode.executeTypeDefinitionProvider', input),
+    getImplementations: input => locations('vscode.executeImplementationProvider', input),
     previewDiff, showDocument, confirmTerminal, executeTerminal,
     emitAudit: event => audit(event), resetSession, cancelTerminal,
-    dispose() { resetSession(); provider.dispose(); },
+    dispose() { resetSession(); taskManager?.dispose(); provider.dispose(); },
   };
+  Object.assign(host, createWorkspaceOps({ vscode, snapshot, checkedPath, readForWorkspace, recheck, withFileLock,
+    relativeInput, toRelative, hashText, assertSafeContent, pendingApprovals, fail }));
+  taskManager = createTaskManager({ getWorkspace, getAccess: host.getAccess,
+    checkCwd: (workspace, cwd) => checkedPath(workspace, cwd, { directory: true, capability: 'terminal' }),
+    confirm: confirmTerminal, validateCommand, environment: safeEnvironment,
+    audit, onChange: () => { try { onTaskChange(); } catch {} }
+  });
+  host.startTerminalTask = input => taskManager.start(input);
+  host.getTerminalTask = input => taskManager.get(input);
+  host.listTerminalTasks = input => taskManager.list(input);
+  host.cancelTerminalTask = input => taskManager.cancel(input);
   return host;
 }
 

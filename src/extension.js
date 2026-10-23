@@ -6,6 +6,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { startServer } = require('./server');
 const { createVscodeHost } = require('./vscode-host');
+const { createDashboard } = require('./dashboard');
+const { getToolCatalog } = require('./tools');
 
 let activeDispose;
 
@@ -20,11 +22,13 @@ function activate(context) {
   let disposed = false;
   let lifecycle = Promise.resolve();
   let refreshTimer;
+  let dashboard;
   const changes = new vscode.EventEmitter();
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
   status.name = 'Workspace Bridge MCP';
-  status.command = 'workspaceBridge.status';
-  const host = createVscodeHost({ vscode, getAccess: () => ({ ...access }), audit: addAudit });
+  status.command = 'workspaceBridge.openDashboard';
+  const host = createVscodeHost({ vscode, getAccess: () => ({ ...access }), audit: addAudit, onTaskChange: queueRefresh });
+  dashboard = createDashboard({ vscode, context, getState: dashboardState, onAction: dashboardAction });
   let secretKey = tokenKey();
 
   function config() { return vscode.workspace.getConfiguration('workspaceBridge'); }
@@ -36,13 +40,39 @@ function activate(context) {
     return error && typeof error.code === 'string' && /^[A-Z0-9_]{1,60}$/.test(error.code) ? error.code : 'BRIDGE_ERROR';
   }
   function addAudit(event = {}) {
-    const tool = typeof event.tool === 'string' && /^[a-zA-Z0-9_.:-]{1,80}$/.test(event.tool) ? event.tool : 'request';
-    const outcome = event.status || event.outcome;
+    const operation = event.tool || event.operation;
+    const tool = typeof operation === 'string' && /^[a-zA-Z0-9_.:-]{1,80}$/.test(operation) ? operation : 'request';
+    const outcome = event.status || event.outcome || event.state;
     const state = typeof outcome === 'string' && /^[a-zA-Z0-9_.:-]{1,40}$/.test(outcome) ? outcome : 'completed';
     const durationMs = Number.isFinite(event.durationMs) ? Math.max(0, Math.round(event.durationMs)) : undefined;
     events.unshift({ time: new Date().toISOString(), tool, status: state, ...(durationMs === undefined ? {} : { durationMs }) });
     events.length = Math.min(events.length, 100);
-    if (!refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = undefined; refresh(); }, 150);
+    queueRefresh();
+  }
+  function queueRefresh() {
+    if (!disposed && !refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = undefined; refresh(); }, 150);
+  }
+  function taskMetadata() {
+    if (!access.read) return [];
+    try { return host.listTerminalTasks({ workspaceId: host.getWorkspace().id }); } catch { return []; }
+  }
+  function dashboardState() {
+    const workspace = host.getWorkspace();
+    return { version: context.extension.packageJSON.version, running: Boolean(bridge), url: endpoint(),
+      workspace: { name: workspace.name, rootCount: workspace.roots.length, trusted: workspace.trusted }, access: { ...access },
+      tools: getToolCatalog(vscode.env.language), tasks: taskMetadata().map(task => ({ id: task.id, name: task.name, status: task.state,
+        createdAt: new Date(task.createdAt).toISOString(), durationMs: Math.max(0, (task.finishedAt || Date.now()) - (task.startedAt || task.createdAt)),
+        exitCode: task.exitCode, truncated: task.outputTruncated })), recentRequests: events.map(event => ({ ...event })) };
+  }
+  async function dashboardAction(action, payload) {
+    if (action === 'start') return run(start);
+    if (action === 'stop') { revoke(); return run(stop); }
+    if (action === 'access') return handle(setAccess);
+    if (action === 'copyConnection') return handle(copyConnection);
+    if (action === 'copyPrompt') return handle(copyPrompt);
+    if (action === 'rotateToken') { revoke(); return run(rotateToken); }
+    if (action === 'exportDiagnostics') return handle(exportDiagnostics);
+    if (action === 'cancelTask') return host.cancelTerminalTask({ workspaceId: host.getWorkspace().id, id: payload.id });
   }
   function accessLabel() {
     if (!bridge) return t('No access', '未开放访问');
@@ -60,10 +90,11 @@ function activate(context) {
   function refresh() {
     if (disposed) return;
     status.text = bridge ? t('$(plug) Workspace Bridge', '$(plug) 工作区桥接') : t('$(debug-disconnect) Bridge: Off', '$(debug-disconnect) 桥接：已停止');
-    status.tooltip = bridge ? `${endpoint()}\n${accessLabel()}` : t('Workspace Bridge MCP is stopped. Click to start.', '工作区 MCP 桥接已停止。点击以启动。');
+    status.tooltip = bridge ? `${endpoint()}\n${accessLabel()}` : t('Workspace Bridge MCP is stopped. Click to open the control center.', '工作区 MCP 桥接已停止。点击打开控制台。');
     status.backgroundColor = access.terminal ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
     status.show();
     changes.fire();
+    void dashboard?.update();
   }
   function item(label, icon, command, description) {
     const row = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
@@ -83,6 +114,7 @@ function activate(context) {
       }
       if (parent) return [];
       const rows = [
+        item(t('Open control center', '打开控制台'), 'dashboard', 'workspaceBridge.openDashboard', `${getToolCatalog().length} ${t('tools', '个工具')}`),
         item(bridge ? t('Running locally', '本地运行中') : t('Stopped', '已停止'), bridge ? 'pass-filled' : 'circle-outline', 'workspaceBridge.status'),
         item(t('Workspace', '工作区'), 'folder-opened', undefined, `${host.getWorkspace().name} · ${host.getWorkspace().roots.length} ${t('roots', '个根目录')}`),
         item(t('Endpoint', '连接地址'), 'link', bridge ? 'workspaceBridge.copyConnection' : 'workspaceBridge.start', endpoint() || t('Start to connect', '启动后可连接')),
@@ -91,6 +123,8 @@ function activate(context) {
       ];
       if (bridge) rows.push(item(t('Copy client configuration', '复制客户端配置'), 'copy', 'workspaceBridge.copyConnection'));
       rows.push(item(t('Copy starter prompt', '复制起步提示词'), 'sparkle', 'workspaceBridge.copyPrompt'));
+      const activeTasks = taskMetadata().filter(task => ['awaiting_approval', 'running', 'stopping'].includes(task.state));
+      rows.push(item(t('Command tasks', '命令任务'), 'tasklist', 'workspaceBridge.openDashboard', `${activeTasks.length} ${t('active', '个活动任务')}`));
       const audit = new vscode.TreeItem(t('Recent requests', '最近请求'), vscode.TreeItemCollapsibleState.Collapsed);
       audit.contextValue = 'workspaceBridge.audit'; audit.iconPath = new vscode.ThemeIcon('history');
       audit.description = String(events.length);
@@ -99,6 +133,8 @@ function activate(context) {
     },
   };
   const tree = vscode.window.createTreeView('workspaceBridge.control', { treeDataProvider: provider, showCollapseAll: true });
+  const taskRefreshTimer = setInterval(() => { if (taskMetadata().some(task => ['awaiting_approval', 'running', 'stopping'].includes(task.state))) refresh(); }, 1000);
+  taskRefreshTimer.unref?.();
 
   function run(operation) {
     const next = lifecycle.then(() => disposed ? undefined : operation());
@@ -238,6 +274,7 @@ function activate(context) {
   }
   async function showStatus() {
     const action = await vscode.window.showQuickPick([
+      { label: t('$(dashboard) Open control center', '$(dashboard) 打开控制台'), command: 'workspaceBridge.openDashboard', description: `${getToolCatalog().length} ${t('tools', '个工具')}` },
       { label: bridge ? t('$(debug-stop) Stop bridge', '$(debug-stop) 停止桥接') : t('$(play) Start bridge', '$(play) 启动桥接'), command: bridge ? 'workspaceBridge.stop' : 'workspaceBridge.start', description: endpoint() },
       { label: t('$(shield) Manage session access', '$(shield) 管理会话权限'), command: 'workspaceBridge.setAccess', description: accessLabel() },
       { label: t('$(copy) Copy client configuration', '$(copy) 复制客户端配置'), command: 'workspaceBridge.copyConnection' },
@@ -269,6 +306,7 @@ function activate(context) {
   const handlers = { copyConnection, copyToken, copyPrompt, setAccess, exportDiagnostics, status: showStatus };
   for (const [name, handler] of Object.entries(handlers)) context.subscriptions.push(vscode.commands.registerCommand(`workspaceBridge.${name}`, () => handle(handler)));
   context.subscriptions.push(vscode.commands.registerCommand('workspaceBridge.start', () => run(start)));
+  context.subscriptions.push(vscode.commands.registerCommand('workspaceBridge.openDashboard', () => dashboard.open()));
   context.subscriptions.push(vscode.commands.registerCommand('workspaceBridge.stop', () => { revoke(); return run(stop); }));
   context.subscriptions.push(vscode.commands.registerCommand('workspaceBridge.rotateToken', () => { revoke(); return run(rotateToken); }));
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -302,6 +340,8 @@ function activate(context) {
     access.read = false; access.edit = false; access.terminal = false;
     host.resetSession();
     clearTimeout(refreshTimer);
+    clearInterval(taskRefreshTimer);
+    dashboard.dispose();
     const previous = bridge; bridge = undefined;
     try {
       if (previous) await previous.close();

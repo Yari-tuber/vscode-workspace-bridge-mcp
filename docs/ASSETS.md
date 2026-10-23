@@ -9,6 +9,7 @@ The documentation uses three kinds of images, with separate sources:
 | Matching hero/workflow `.png` files | Reviewed raster exports of those illustrations. The READMEs use PNG because the VSIX packaging rules restrict non-badge SVG images in README content. Keep the vector originals when updating the design. |
 | `media/screenshots/control-panel.jpg` | Original, inspected screenshot of v0.2.0 running in an isolated VS Code development profile with a synthetic sample project. |
 | `media/screenshots/session-access.jpg` | Screenshot of the same demo's session permission picker, with editing and terminal access both disabled. |
+| `media/screenshots/control-center-v3.jpg`, `media/screenshots/tool-directory-v3.jpg` | Actual v0.3.0 control-center screenshots in a new isolated profile. Tool search was exercised; no real project, token, command body or output is shown. |
 
 `node scripts/capture-readme.js` creates a disposable profile and sample workspace for new screenshots. Use the actual native application window, inspect the complete image before saving, and stop the demo through its task-owned stop signal. The script closes the demo and removes its temporary profile. It never needs a real project, account connection or copied bearer token.
 
