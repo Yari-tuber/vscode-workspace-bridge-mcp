@@ -169,7 +169,7 @@
     "verify:package": "node scripts/verify-package.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "ignore": "^7.0.5",
     "zod": "4.6.7"
   },
